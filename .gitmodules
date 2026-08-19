@@ -1,0 +1,3 @@
+[submodule "submodule/lcdtap"]
+	path = submodule/lcdtap
+	url = git@github.com:shapoco/lcdtap.git

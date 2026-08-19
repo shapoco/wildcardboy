@@ -1,0 +1,5 @@
+.vscode/
+.claude/
+build/
+tmp.*/
+tmp.*
