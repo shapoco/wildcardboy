@@ -1,0 +1,21 @@
+; 8080-II 8-bit write master for the host LCD (ILI9488).
+;
+;   OUT pins  : D0..D7 (8 consecutive GPIOs)
+;   side-set  : WR# (1 pin)
+;
+; One FIFO word carries one byte in bits[7:0] (shift right, autopull at 8),
+; so command bytes (pio_sm_put_blocking) and DMA'd pixel bytes share the
+; same path. 6 SM cycles per byte: at 150 MHz that is 40 ns/byte (25 MB/s)
+; with WR# low 20 ns / high 20 ns, data setup 27 ns, hold 13 ns -- inside
+; the ILI9488 8080-II limits (twc>=30, twrl/twrh>=15, tdst/tdht>=10 ns).
+; When the FIFO runs dry the SM stalls on the "out" with WR# high and the
+; last byte still on the bus.
+
+.program lcd8080
+.side_set 1
+
+.wrap_target
+    out pins, 8    side 1        ; new byte on the bus, WR# high
+    nop            side 0 [2]    ; WR# low for 3 cycles
+    nop            side 1 [1]    ; WR# rising edge latches; high 2 cycles
+.wrap
