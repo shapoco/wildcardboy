@@ -22,14 +22,21 @@ static constexpr uint16_t LCD_WIDTH = 480;
 static constexpr uint16_t LCD_HEIGHT = 320;
 
 //-----------------------------------------------------------------------------
-// AUX I2C (I2C0): host keypad PCA9555 + logic card EEPROM
+// AUX I2C buses. Both pin pairs map to the I2C0 controller (GPIO % 4 == 0/1),
+// so exactly one pair is switched to the I2C function at a time; the idle
+// pair sits Hi-Z. This keeps card hot-plug glitches on LCAUX away from the
+// host bus (HAUX).
 //-----------------------------------------------------------------------------
-static constexpr uint PIN_AUX_SDA = 28;
-static constexpr uint PIN_AUX_SCL = 29;
+// HAUX: host-side devices (keypad PCA9555).
+static constexpr uint PIN_HAUX_SDA = 36;
+static constexpr uint PIN_HAUX_SCL = 37;
+// LCAUX: logic-card-side devices (ID EEPROM, card PCA9555 on other cards).
+static constexpr uint PIN_LCAUX_SDA = 28;
+static constexpr uint PIN_LCAUX_SCL = 29;
 static constexpr uint32_t AUX_I2C_BAUD = 400 * 1000;
 
-static constexpr uint8_t ADDR_HOST_KEYPAD = 0x21;  // PCA9555 (host)
-static constexpr uint8_t ADDR_CARD_EEPROM = 0x50;  // 24LC256 (logic card)
+static constexpr uint8_t ADDR_HOST_KEYPAD = 0x21;  // PCA9555 (host, HAUX)
+static constexpr uint8_t ADDR_CARD_EEPROM = 0x50;  // 24LC256 (card, LCAUX)
 
 // Host keypad bits as returned by PCA9555 (P0 = bits 0..7, P1 = bits 8..15).
 // Inputs are active-low on the wire; hostKeysRead() returns them already

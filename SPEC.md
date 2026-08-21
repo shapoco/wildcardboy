@@ -32,8 +32,8 @@ Home ボタンは本体側の機能の呼び出しに使用する。
 
 |GPIO|割り当て|説明|
 |---|---|---|
-|GPIO28|AUX_SDA|I2C データライン|
-|GPIO29|AUX_SCL|I2C クロックライン|
+|GPIO36|HAUX_SDA|I2C データライン|
+|GPIO37|HAUX_SCL|I2C クロックライン|
 
 |PCA9555ポート|割り当て|説明|
 |---|---|---|
@@ -73,7 +73,7 @@ ILI9488 互換の 320x480 ドットの液晶を横に倒して使用する。8bi
 
 ### TF カード I/F
 
-SPI 接続。割り当ては T.B.D.
+SPI 接続。
 
 |GPIO|割り当て|
 |---|---|
@@ -110,8 +110,8 @@ T.B.D.
 |16|GPIO11|LCIO11|ロジックカード側の GPIO11|
 |17|GPIO12|LCIO12|ロジックカード側の GPIO12|
 |18|GPIO13|LCIO13|ロジックカード側の GPIO13|
-|19|GPIO28|AUX_SDA|I2C データライン|
-|20|GPIO29|AUX_SCL|I2C クロックライン|
+|19|GPIO28|LCAUX_SDA|I2C データライン|
+|20|GPIO29|LCAUX_SCL|I2C クロックライン|
 |21|GPIO30|LCUSB_DP|USB D+|
 |22|GPIO31|LCUSB_DM|USB D-|
 |23|-|LC3V3|3.3V 電源|
@@ -119,7 +119,7 @@ T.B.D.
 
 #### カードIDチップ
 
-AUX_SDA/SCL は、ロジックカード上の EEPROM (24LC256, devaddr=0x50) に接続されており、本体側から読み出すことで、ロジックカードの種類を判別することができる。
+LCAUX_SDA/SCL は、ロジックカード上の EEPROM (24LC256, devaddr=0x50) に接続されており、本体側から読み出すことで、ロジックカードの種類を判別することができる。
 
 内容は T.B.D.。
 
@@ -174,7 +174,7 @@ AUX_SDA/SCL は、ロジックカード上の EEPROM (24LC256, devaddr=0x50) に
 
 #### キーパッド I/F が I2C の場合
 
-キーパッド I/F がパラレルで使用できない場合は I2C 接続となる。I2C は AUX_SDA/AUX_SCL を通じてロジックカード上の PCA9555 (devaddr=0x20) に接続される。
+キーパッド I/F がパラレルで使用できない場合は I2C 接続となる。I2C は LCAUX_SDA/LCAUX_SCL を通じてロジックカード上の PCA9555 (devaddr=0x20) に接続される。
 
 |PCA9555ポート|割り当て|説明|
 |---|---|---|
@@ -207,7 +207,10 @@ TF カードスロットをホストコントローラに接続するかロジ�
 
 |GPIO|信号名|説明|
 |---|---|---|
-|T.B.D.|T.B.D.|T.B.D.|
+|GPIO38|LCTF_ENAX|Low=TFカードはロジックカードに接続, High=TFカードはホストコントローラに接続|
+
+LCTF_ENAX は基板上でプルアップされている。
+LCTF_ENAX が Low の間は、ホストコントローラ側の TF カード I/F は High-Z でなければならない。
 
 #### USB I/F
 

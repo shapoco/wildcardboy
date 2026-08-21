@@ -1,6 +1,7 @@
 // WildCardBoy pretest firmware: TJP (TinyJoypad) logic card bring-up.
 //
-//   1. Detect the card by probing its ID EEPROM over AUX I2C.
+//   1. Detect the card by probing its ID EEPROM over LCAUX I2C
+//      (3 consecutive ACKs, 200 ms apart, debounce the hot-plug).
 //   2. Set up the WildCardBus for the TJP card and an LcdTap instance
 //      (SSD1306 / I2C slave @0x3C on LCIO2/3).
 //   3. Reset the ATtiny85 via LCIO13.
@@ -29,7 +30,10 @@ using namespace wcb;
 //-----------------------------------------------------------------------------
 // Tunables
 //-----------------------------------------------------------------------------
-static constexpr uint32_t CARD_PROBE_INTERVAL_MS = 500;
+static constexpr uint32_t CARD_PROBE_INTERVAL_MS = 200;
+// The card counts as present only after this many consecutive EEPROM ACKs
+// (debounces the hot-plug contact chatter).
+static constexpr uint32_t CARD_PROBE_SUCCESS_COUNT = 3;
 static constexpr uint32_t KEY_POLL_INTERVAL_MS = 5;
 static constexpr uint32_t STATS_INTERVAL_MS = 1000;
 static constexpr uint32_t PUMP_MAX_LINES_PER_CALL = 48;
@@ -159,6 +163,7 @@ int main() {
 
   bool cardPresent = false;
   bool noCardShown = false;
+  uint32_t probeOkCount = 0;
   uint32_t lastProbeMs = 0;
   uint32_t lastKeyPollMs = 0;
   uint32_t lastStatsMs = nowMs();
@@ -170,21 +175,36 @@ int main() {
     const uint32_t now = nowMs();
 
     //--- card detection -------------------------------------------------
+    // Non-blocking: one probe per interval; the card counts as present
+    // only after CARD_PROBE_SUCCESS_COUNT consecutive ACKs so hot-plug
+    // contact chatter cannot trigger a premature bring-up.
     if (!cardPresent) {
       if (now - lastProbeMs >= CARD_PROBE_INTERVAL_MS || lastProbeMs == 0) {
         lastProbeMs = now;
         if (cardEepromProbe()) {
-          printf("card EEPROM (0x%02x) ACKed -> TJP card detected\n",
-                 ADDR_CARD_EEPROM);
-          cardPresent = true;
-          startTjpCard();
-        } else if (!noCardShown) {
-          printf("no card (EEPROM 0x%02x NAK); retrying every %lu ms\n",
-                 ADDR_CARD_EEPROM,
-                 static_cast<unsigned long>(CARD_PROBE_INTERVAL_MS));
-          drawTextCentered(gLcd, 200, "No Logic Card", COLOR_YELLOW,
-                           COLOR_BLACK, 2);
-          noCardShown = true;
+          probeOkCount++;
+          printf("card EEPROM (0x%02x) ACK %lu/%lu\n", ADDR_CARD_EEPROM,
+                 static_cast<unsigned long>(probeOkCount),
+                 static_cast<unsigned long>(CARD_PROBE_SUCCESS_COUNT));
+          if (probeOkCount >= CARD_PROBE_SUCCESS_COUNT) {
+            printf("TJP card detected\n");
+            cardPresent = true;
+            startTjpCard();
+          }
+        } else {
+          if (probeOkCount > 0) {
+            printf("card EEPROM (0x%02x) NAK; ACK streak reset\n",
+                   ADDR_CARD_EEPROM);
+          }
+          probeOkCount = 0;
+          if (!noCardShown) {
+            printf("no card (EEPROM 0x%02x NAK); retrying every %lu ms\n",
+                   ADDR_CARD_EEPROM,
+                   static_cast<unsigned long>(CARD_PROBE_INTERVAL_MS));
+            drawTextCentered(gLcd, 200, "No Logic Card", COLOR_YELLOW,
+                             COLOR_BLACK, 2);
+            noCardShown = true;
+          }
         }
       }
     }

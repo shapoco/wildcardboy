@@ -5,14 +5,17 @@
 ## 動作
 
 1. 起動時に本体 LCD (ILI9488, 8080 8bit) を初期化し、カラーバーとバナーを表示。
-2. AUX I2C (I2C0, GPIO28/29) でカード EEPROM (0x50) をプローブ。ACK が返ればカード検出。
-   未検出時は "No Logic Card" を表示し 500 ms 周期で再試行。
+2. LCAUX I2C (GPIO28/29) でカード EEPROM (0x50) を 200 ms 周期でプローブ。
+   **3 回連続で ACK** が返ればカード検出 (挿抜時のチャタリング対策)。NAK で連続カウントはリセット。
+   未検出時は "No Logic Card" を表示。
+   ※ HAUX (GPIO36/37, PCA9555) と LCAUX は同じ I2C0 に属するため、アクセスの度に
+   ピン機能を切り替え、使わない側は Hi-Z にする (挿抜の擾乱を本体側バスに波及させない)。
 3. 検出後:
    - LCIO5-9 (キー, open-drain active-low) / LCIO13 (RESET) を初期化
    - LcdTap を TinyJoypad preset (SSD1306, I2C slave 0x3C on LCIO2/3) で起動
    - LCIO13 で ATtiny85 をリセット
 4. 以降ループ:
-   - PCA9555 (0x21) の本体キー → LCIO5-9 へ転送 (L/R/U/D/A のみ)
+   - PCA9555 (0x21, HAUX) の本体キー → LCIO5-9 へ転送 (L/R/U/D/A のみ)
    - I2C1 で受けた SSD1306 コマンド → LcdTap → 更新行のみ本体 LCD へ転送 (128x64 を 3 倍で中央表示)
 
 ## ビルド
