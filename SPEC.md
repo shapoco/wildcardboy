@@ -197,10 +197,10 @@ LCAUX_SDA/SCL は、ロジックカード上の EEPROM (24LC256, devaddr=0x50) �
 
 |信号名|割り当て|
 |---|---|
-|LCIO5|LCTF_MISO|
-|LCIO6|LCTF_CS|
-|LCIO7|LCTF_SCK|
-|LCIO8|LCTF_MOSI|
+|LCIO9|LCTF_MOSI|
+|LCIO10|LCTF_CS|
+|LCIO11|LCTF_SCK|
+|LCIO12|LCTF_MISO|
 
 ロジックカードが TF カードを占有する間、ホストコントローラは TF カードへはアクセスできなくなる。
 TF カードスロットをホストコントローラに接続するかロジックカードに接続するかは、ホストコントローラの GPIO で切り替える。
