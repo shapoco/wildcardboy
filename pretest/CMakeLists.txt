@@ -18,6 +18,9 @@ set(LCDTAP_DIR ${CMAKE_CURRENT_LIST_DIR}/../submodule/lcdtap)
 # can pick up hardware_interp_headers.
 add_subdirectory(${LCDTAP_DIR}/lib lcdtap_lib)
 
+# FatFs (read-only config), shared with firmware/.
+add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../firmware/lib/fatfs fatfs)
+
 add_executable(pretest
     src/main.cpp
     src/ili9488.cpp
@@ -25,6 +28,11 @@ add_executable(pretest
     src/text_draw.cpp
     src/aux_i2c.cpp
     src/card_io.cpp
+    src/sd_spi.cpp
+    src/diskio.cpp
+    src/isp_tiny85.cpp
+    src/app_image.cpp
+    src/ui_menu.cpp
     # RP2350 hardware I2C slave -> ring buffer -> LcdTap (reused from the
     # LcdTap pico2 example; self-contained).
     ${LCDTAP_DIR}/example/pico2_common/src/i2c_slave.cpp
@@ -40,7 +48,9 @@ target_include_directories(pretest PRIVATE
 target_link_libraries(pretest
     pico_stdlib
     lcdtap
+    fatfs
     hardware_pio
+    hardware_spi
     hardware_dma
     hardware_i2c
     hardware_irq
@@ -50,6 +60,9 @@ target_link_libraries(pretest
 # Wait up to 3 s for a USB CDC host so early boot logs are not lost.
 target_compile_definitions(pretest PRIVATE
     PICO_STDIO_USB_CONNECT_WAIT_TIMEOUT_MS=3000
+    # FatFs (LFN on stack) needs more than the 2 KB default; 4 KB is the
+    # most the core-0 stack region (SCRATCH_Y) can hold.
+    PICO_STACK_SIZE=0x1000
 )
 
 # Debug output over the native USB port. The board's default UART pins

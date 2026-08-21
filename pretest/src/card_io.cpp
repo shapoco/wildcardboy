@@ -55,11 +55,14 @@ void cardKeysSet(uint16_t hostKeys) {
 
 void cardKeysRelease() { cardKeysSet(0); }
 
+void cardResetAssert() { odAssert(PIN_LC_RESET); }
+void cardResetRelease() { odRelease(PIN_LC_RESET); }
+
 void cardResetPulse(uint32_t lowMs) {
   cardKeysRelease();
-  odAssert(PIN_LC_RESET);
+  cardResetAssert();
   sleep_ms(lowMs);
-  odRelease(PIN_LC_RESET);
+  cardResetRelease();
 }
 
 }  // namespace wcb

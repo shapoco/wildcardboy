@@ -18,6 +18,22 @@
    - PCA9555 (0x21, HAUX) の本体キー → LCIO5-9 へ転送 (L/R/U/D/A のみ)
    - I2C1 で受けた SSD1306 コマンド → LcdTap → 更新行のみ本体 LCD へ転送 (128x64 を 3 倍で中央表示)
 
+5. HOME ボタンでシステムメニュー (`Launch` / `Apps`) を開閉。メニュー表示中もカードは動作を続け、
+   LCD 転送だけ止まる。`Apps` で TF カード (`/WCB/Cards/TJP/Apps/`) のファイルブラウザを開き、
+   `.bin` (生バイナリ) / `.hex` (Intel HEX) を選んで A → 確認 → ATtiny85 へ ISP 書き込み
+   (署名確認 → 消去 → 書き込み → ベリファイ、8 KB 上限、ヒューズは読むだけ)。
+
+## TF カード
+
+- SPI0 (GPIO32-35)、LCTF_ENAX (GPIO38) は起動時に High 固定 (ホストが TF を占有)。
+- FatFs R0.16 (`firmware/lib/fatfs/`、読み取り専用・LFN・exFAT) + 自前 SD SPI ドライバ (`src/sd_spi.cpp`)。
+  SD v1 / SDSC / SDHC / SDXC 対応、MMC 非対応。ブラウザを開くたびにカードを再検出する。
+
+## ISP 書き込み
+
+LCIO2=MOSI / LCIO3=SCK / LCIO9=MISO / LCIO13=RESET をビットバング (~100 kHz)。書き込み中は
+キー線を Hi-Z にし、I2C1 スレーブを停止する。終了時に RESET を解放すると新しいアプリが起動する。
+
 ## ビルド
 
 ```
@@ -30,6 +46,16 @@ USB CDC (本体基板の native USB)。起動後 3 秒まで接続を待つ。
 1 秒毎に `[stat] ...` 行で LcdTap 受信バイト数、リングバッファの drop/overflow、LCD 送信ライン数などを出力する。
 
 UART stdio は無効。ボードのデフォルト UART ピン (GPIO12/13) が LCIO12/13 (ATtiny85 RESET) と衝突するため。
+
+## 操作 (システムメニュー)
+
+```
+HOME            : メニュー開閉
+U/D             : カーソル移動
+L / B           : 親ディレクトリ (ルートではホームへ)
+R               : 子ディレクトリへ
+A               : ディレクトリ=移動 / ファイル=書き込み確認
+```
 
 ## 注意
 

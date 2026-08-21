@@ -6,6 +6,9 @@
 //      (SSD1306 / I2C slave @0x3C on LCIO2/3).
 //   3. Reset the ATtiny85 via LCIO13.
 //   4. Loop: host keypad -> card key lines, LcdTap framebuffer -> host LCD.
+//   HOME opens the system menu (Launch / Apps). Apps browses the TF card
+//   (FatFs over SPI0) and programs the selected .bin/.hex into the ATtiny85
+//   over ISP (LCIO2/3/9/13) while the I2C1 slave is suspended.
 //
 // Debug output: USB CDC. See ../SPEC.md for the pin map.
 
@@ -18,12 +21,16 @@
 #include <lcdtap/lcdtap.hpp>
 #include <lcdtap/pico2/i2c_slave.hpp>
 
+#include "app_image.hpp"
 #include "aux_i2c.hpp"
 #include "board_pins.hpp"
 #include "card_io.hpp"
 #include "ili9488.hpp"
+#include "isp_tiny85.hpp"
 #include "lcd_pump.hpp"
+#include "sd_spi.hpp"
 #include "text_draw.hpp"
+#include "ui_menu.hpp"
 
 using namespace wcb;
 
@@ -45,13 +52,32 @@ static constexpr float LCD_PIO_CLKDIV = 1.0f;     // 40 ns/byte at 150 MHz
 //-----------------------------------------------------------------------------
 static Ili9488 gLcd;
 static LcdPump gPump;
+static UiMenu gUi;
 static lcdtap::LcdTap* gTap = nullptr;
 static lcdtap::pico2::I2cSlaveState gI2c;
+static lcdtap::pico2::I2cSlaveConfig gI2cCfg;
 static uint32_t gI2cRingBuf[I2C_RING_WORDS];
+static bool gCardPresent = false;
+static uint8_t gAppImage[TINY85_FLASH_SIZE];
 
 static inline uint32_t nowMs() { return to_ms_since_boot(get_absolute_time()); }
 
 static void lcdtapLog(void*, const char* msg) { printf("[lcdtap] %s\n", msg); }
+
+//-----------------------------------------------------------------------------
+// Card bus (I2C1 slave for the SSD1306 stream)
+//-----------------------------------------------------------------------------
+
+static void cardBusAttach() {
+  gI2c.inst = nullptr;
+  lcdtap::pico2::i2cSlaveInit(&gI2c, gI2cCfg, gI2cRingBuf, I2C_RING_WORDS);
+  gI2c.inst = gTap;
+}
+
+static void cardBusDetach() {
+  lcdtap::pico2::i2cSlaveDeinit(&gI2c);
+  gI2c.inst = nullptr;
+}
 
 //-----------------------------------------------------------------------------
 // Card bring-up
@@ -81,17 +107,14 @@ static void startTjpCard() {
   }
 
   // I2C1 hardware slave on LCIO2/3, feeding the ring buffer from IRQ.
-  lcdtap::pico2::I2cSlaveConfig i2cCfg;
-  i2cCfg.i2c = i2c1;
-  i2cCfg.pinSda = PIN_LC_LCD_SDA;
-  i2cCfg.pinScl = PIN_LC_LCD_SCL;
-  i2cCfg.slaveAddr = cfg.i2cSlaveAddr;
-  gI2c.inst = nullptr;
+  gI2cCfg.i2c = i2c1;
+  gI2cCfg.pinSda = PIN_LC_LCD_SDA;
+  gI2cCfg.pinScl = PIN_LC_LCD_SCL;
+  gI2cCfg.slaveAddr = cfg.i2cSlaveAddr;
   gI2c.dropWords = 0;
   gI2c.hwOverflowCount = 0;
   gI2c.backlogMaxWords = 0;
-  lcdtap::pico2::i2cSlaveInit(&gI2c, i2cCfg, gI2cRingBuf, I2C_RING_WORDS);
-  gI2c.inst = gTap;
+  cardBusAttach();
 
   gPump.init(gTap, &gLcd);
 
@@ -102,6 +125,96 @@ static void startTjpCard() {
   cardResetPulse(10);
   gTap->inputReset(false);
   printf("TJP card running\n");
+}
+
+//-----------------------------------------------------------------------------
+// App programming (called from the UI, blocking)
+//-----------------------------------------------------------------------------
+
+static void ispProgressWrite(int pct, void*) { gUi.progress("Write", pct); }
+static void ispProgressVerify(int pct, void*) { gUi.progress("Verify", pct); }
+
+static bool hookCardPresent(void*) { return gCardPresent; }
+
+static const char* hookProgramApp(const char* path, void*) {
+  printf("[prog] loading %s\n", path);
+  gUi.progress("Load", 0);
+  uint32_t len = 0;
+  LoadResult lr = appImageLoad(path, gAppImage, sizeof(gAppImage), &len);
+  if (lr != LoadResult::OK) {
+    printf("[prog] load failed: %s\n", loadResultName(lr));
+    return loadResultName(lr);
+  }
+  gUi.progress("Load", 100);
+  printf("[prog] image: %lu bytes\n", static_cast<unsigned long>(len));
+
+  // Quiesce the card bus: no key drive, no I2C1 slave on LCIO2/3.
+  cardKeysRelease();
+  cardBusDetach();
+  gTap->inputReset(true);
+
+  const char* err = nullptr;
+  uint64_t t0 = time_us_64();
+  do {
+    if (!ispBegin()) {
+      err = "ISP enable failed";
+      break;
+    }
+    IspDeviceInfo dev;
+    ispReadDevice(&dev);
+    printf("[prog] signature %02x %02x %02x  fuses L=%02x H=%02x E=%02x "
+           "lock=%02x\n",
+           dev.signature[0], dev.signature[1], dev.signature[2], dev.fuseLow,
+           dev.fuseHigh, dev.fuseExt, dev.lock);
+    if (!ispIsTiny85(dev)) {
+      err = "Not an ATtiny85";
+      break;
+    }
+    gUi.progress("Erase", 0);
+    if (!ispChipErase()) {
+      err = "Chip erase failed";
+      break;
+    }
+    gUi.progress("Erase", 100);
+    gUi.progress("Write", 0);
+    if (!ispWriteFlash(gAppImage, len, ispProgressWrite, nullptr)) {
+      err = "Flash write failed";
+      break;
+    }
+    gUi.progress("Verify", 0);
+    uint32_t bad = 0;
+    if (!ispVerifyFlash(gAppImage, len, &bad, ispProgressVerify, nullptr)) {
+      printf("[prog] verify mismatch at 0x%04lx\n",
+             static_cast<unsigned long>(bad));
+      err = "Verify failed";
+      break;
+    }
+  } while (false);
+  uint64_t t1 = time_us_64();
+
+  // Back to game mode: data pins Hi-Z, RESET released (new program starts),
+  // key lines re-armed, I2C1 slave listening again.
+  ispEnd();
+  cardIoInit();
+  cardBusAttach();
+  gTap->inputReset(false);
+
+  printf("[prog] %s (%llu ms)\n", err ? err : "done",
+         static_cast<unsigned long long>((t1 - t0) / 1000));
+  return err;
+}
+
+//-----------------------------------------------------------------------------
+// Screens outside the menu
+//-----------------------------------------------------------------------------
+
+static void drawNoCardScreen() {
+  gLcd.clear(COLOR_BLACK);
+  drawTextCentered(gLcd, 120, "WildCardBoy pretest", COLOR_WHITE, COLOR_BLACK,
+                   3);
+  drawTextCentered(gLcd, 200, "No Logic Card", COLOR_YELLOW, COLOR_BLACK, 2);
+  drawTextCentered(gLcd, 300, "HOME: system menu", COLOR_GRAY, COLOR_BLACK,
+                   1);
 }
 
 //-----------------------------------------------------------------------------
@@ -135,6 +248,10 @@ int main() {
   stdio_init_all();
   printf("\n=== WildCardBoy pretest (TJP card) ===\n");
 
+  // TF card mux to the host, SPI0 parked (the card itself is probed when
+  // the browser opens).
+  sdBusInit();
+
   // Host LCD.
   Ili9488::Pins lcdPins = {PIN_LCD_D0, PIN_LCD_DC, PIN_LCD_WR,
                            PIN_LCD_RD, PIN_LCD_CS, PIN_LCD_RST};
@@ -161,7 +278,13 @@ int main() {
   // AUX I2C (keypad + card EEPROM).
   auxI2cInit();
 
-  bool cardPresent = false;
+  // System menu.
+  UiHooks hooks;
+  hooks.cardPresent = hookCardPresent;
+  hooks.programApp = hookProgramApp;
+  hooks.user = nullptr;
+  gUi.init(&gLcd, hooks);
+
   bool noCardShown = false;
   uint32_t probeOkCount = 0;
   uint32_t lastProbeMs = 0;
@@ -169,16 +292,18 @@ int main() {
   uint32_t lastStatsMs = nowMs();
   uint32_t loops = 0;
   uint16_t keys = 0;
+  uint16_t prevKeys = 0;
   bool keysOk = false;
 
   while (true) {
     const uint32_t now = nowMs();
+    const bool menuWasVisible = gUi.isVisible();
 
     //--- card detection -------------------------------------------------
     // Non-blocking: one probe per interval; the card counts as present
     // only after CARD_PROBE_SUCCESS_COUNT consecutive ACKs so hot-plug
     // contact chatter cannot trigger a premature bring-up.
-    if (!cardPresent) {
+    if (!gCardPresent) {
       if (now - lastProbeMs >= CARD_PROBE_INTERVAL_MS || lastProbeMs == 0) {
         lastProbeMs = now;
         if (cardEepromProbe()) {
@@ -188,7 +313,8 @@ int main() {
                  static_cast<unsigned long>(CARD_PROBE_SUCCESS_COUNT));
           if (probeOkCount >= CARD_PROBE_SUCCESS_COUNT) {
             printf("TJP card detected\n");
-            cardPresent = true;
+            gCardPresent = true;
+            if (gUi.isVisible()) gUi.close();  // pump takes the screen
             startTjpCard();
           }
         } else {
@@ -201,31 +327,51 @@ int main() {
             printf("no card (EEPROM 0x%02x NAK); retrying every %lu ms\n",
                    ADDR_CARD_EEPROM,
                    static_cast<unsigned long>(CARD_PROBE_INTERVAL_MS));
-            drawTextCentered(gLcd, 200, "No Logic Card", COLOR_YELLOW,
-                             COLOR_BLACK, 2);
+            if (!gUi.isVisible()) drawNoCardScreen();
             noCardShown = true;
           }
         }
       }
     }
 
-    //--- host keypad -> card ---------------------------------------------
+    //--- host keypad -----------------------------------------------------
     if (now - lastKeyPollMs >= KEY_POLL_INTERVAL_MS) {
       lastKeyPollMs = now;
       uint16_t k;
       keysOk = hostKeysRead(&k);
-      if (keysOk && k != keys) {
-        printf("keys: 0x%04x\n", k);
-      }
       keys = keysOk ? k : 0;
-      if (cardPresent) cardKeysSet(keys);
+      const uint16_t edge = keys & ~prevKeys;
+      prevKeys = keys;
+      if (edge) printf("keys: 0x%04x (edge 0x%04x)\n", keys, edge);
+
+      if (edge & HKEY_HOME) {
+        if (gUi.isVisible()) {
+          gUi.close();
+        } else {
+          if (gCardPresent) cardKeysRelease();
+          gUi.open();
+        }
+      } else if (gUi.isVisible()) {
+        gUi.onKeysPressed(edge);  // may close itself (Launch)
+      } else if (gCardPresent) {
+        cardKeysSet(keys);
+      }
+    }
+
+    //--- menu closed this iteration: hand the screen back -----------------
+    if (menuWasVisible && !gUi.isVisible()) {
+      if (gCardPresent) {
+        gPump.requestFullRepaint();
+      } else {
+        drawNoCardScreen();
+      }
     }
 
     //--- card LCD stream -> host LCD ---------------------------------------
-    if (cardPresent) {
+    if (gCardPresent) {
       lcdtap::pico2::i2cSlaveProcess(&gI2c);
       gTap->tick(now);
-      gPump.process(PUMP_MAX_LINES_PER_CALL);
+      if (!gUi.isVisible()) gPump.process(PUMP_MAX_LINES_PER_CALL);
     }
 
     //--- periodic stats -----------------------------------------------------

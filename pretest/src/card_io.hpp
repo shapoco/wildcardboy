@@ -21,6 +21,10 @@ void cardKeysSet(uint16_t hostKeys);
 // Release all key lines.
 void cardKeysRelease();
 
+// RESET line control (open-drain: assert = drive low, release = Hi-Z).
+void cardResetAssert();
+void cardResetRelease();
+
 // Pulse RESET low. Keys are released first so the ATtiny85 sees idle inputs
 // when it comes out of reset.
 void cardResetPulse(uint32_t lowMs = 10);

@@ -22,6 +22,17 @@ static constexpr uint16_t LCD_WIDTH = 480;
 static constexpr uint16_t LCD_HEIGHT = 320;
 
 //-----------------------------------------------------------------------------
+// TF card (SPI0 pin group) and the TF card mux
+//-----------------------------------------------------------------------------
+static constexpr uint PIN_HTF_MISO = 32;  // SPI0 RX
+static constexpr uint PIN_HTF_CS = 33;    // GPIO-controlled
+static constexpr uint PIN_HTF_SCK = 34;   // SPI0 SCK
+static constexpr uint PIN_HTF_MOSI = 35;  // SPI0 TX
+// Low = TF card wired to the logic card, High = to the host controller.
+// Pulled up on the board. While Low the HTF_* pins must be Hi-Z.
+static constexpr uint PIN_LCTF_ENAX = 38;
+
+//-----------------------------------------------------------------------------
 // AUX I2C buses. Both pin pairs map to the I2C0 controller (GPIO % 4 == 0/1),
 // so exactly one pair is switched to the I2C function at a time; the idle
 // pair sits Hi-Z. This keeps card hot-plug glitches on LCAUX away from the
@@ -68,8 +79,18 @@ static constexpr uint PIN_LC_KEY_D = 8;    // LCIO8
 static constexpr uint PIN_LC_KEY_A = 9;    // LCIO9
 static constexpr uint PIN_LC_RESET = 13;   // LCIO13 -> ATtiny85 RESET (o.d.)
 
+// ATtiny85 ISP lines (shared with the SSD1306 I2C pair and the A key).
+static constexpr uint PIN_LC_ISP_MOSI = 2;  // LCIO2 -> PB0
+static constexpr uint PIN_LC_ISP_SCK = 3;   // LCIO3 -> PB2
+static constexpr uint PIN_LC_ISP_MISO = 9;  // LCIO9 -> PB1
+
 // SSD1306 I2C slave address the ATtiny85 talks to.
 static constexpr uint8_t ADDR_LC_LCD = 0x3C;
+
+// TF card layout (see SPEC.md).
+static constexpr const char* CARD_ID = "TJP";
+static constexpr const char* APPS_DIR = "/WCB/Cards/TJP/Apps";
+static constexpr uint32_t TINY85_FLASH_SIZE = 8192;
 
 // Card key bits (subset of the host bits, same positions).
 static constexpr uint16_t CKEY_MASK = HKEY_L | HKEY_R | HKEY_U | HKEY_D | HKEY_A;
