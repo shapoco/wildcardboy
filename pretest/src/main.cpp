@@ -1,15 +1,16 @@
-// WildCardBoy pretest firmware: logic card bring-up (TJP card).
+// WildCardBoy pretest firmware: logic card bring-up (TJP / PP1 / PP2).
 //
-//   1. Detect the card: its profile EEPROM must ACK 3 times (200 ms apart),
-//      then the profile is read and validated (length / CRC32 / CBOR).
-//   2. Configure the WildCardBus from the profile (key lines, RESET, LcdTap
-//      preset + overrides, ISP pins, key map) and start LcdTap as an I2C
-//      slave on LCIO2/3.
-//   3. Reset the card MCU.
-//   4. Loop: host keypad -> card key lines, LcdTap framebuffer -> host LCD.
-//   HOME opens the system menu: Launch / Apps (program the card MCU from
-//   the TF card) / Profile (write a profile .hex into the card EEPROM and
-//   re-detect the card).
+//   Detect : the card's profile EEPROM must ACK 3 times (200 ms apart), then
+//            the profile is read and validated (length / CRC32 / CBOR).
+//   Stopped: RESET asserted, LCTF_ENAX high. Entered after detection (the
+//            card auto-starts only when it was present at boot).
+//   Running: RESET released; LcdTap captures the card's LCD stream on core 1
+//            (I2C or 4-line SPI) and core 0 pushes the changed lines to the
+//            host LCD; host keys go to the card's key lines (GPIO or the
+//            card PCA9555); with useTfCard the TF card is handed to the card.
+//   HOME opens the system menu: Start/Stop card, Apps (program the card MCU
+//   from the TF card: ATtiny ISP over SPI or UF2 over USB MSC), Profile
+//   (write a profile .hex into the card EEPROM and re-detect the card).
 //
 // Debug output: USB CDC. See ../spec/ for the pin map.
 
@@ -17,11 +18,11 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "hardware/i2c.h"
+#include "hardware/clocks.h"
 #include "pico/stdlib.h"
+#include "tusb.h"
 
 #include <lcdtap/lcdtap.hpp>
-#include <lcdtap/pico2/i2c_slave.hpp>
 
 #include "app_image.hpp"
 #include "aux_i2c.hpp"
@@ -29,10 +30,14 @@
 #include "card_eeprom.hpp"
 #include "card_io.hpp"
 #include "card_profile.hpp"
+#include "core1.hpp"
 #include "ili9488.hpp"
 #include "isp_tiny85.hpp"
+#include "isp_usb.hpp"
 #include "lcd_pump.hpp"
+#include "lcdtap_input.hpp"
 #include "sd_spi.hpp"
+#include "sys_clock.hpp"
 #include "text_draw.hpp"
 #include "ui_menu.hpp"
 
@@ -45,12 +50,11 @@ static constexpr uint32_t CARD_PROBE_INTERVAL_MS = 200;
 // The card counts as present only after this many consecutive EEPROM ACKs
 // (debounces the hot-plug contact chatter).
 static constexpr uint32_t CARD_PROBE_SUCCESS_COUNT = 3;
-static constexpr uint32_t CARD_INVALID_POLL_MS = 500;
+static constexpr uint32_t CARD_IDLE_POLL_MS = 500;      // INVALID / STOPPED removal check
 static constexpr uint32_t KEY_POLL_INTERVAL_MS = 5;
 static constexpr uint32_t STATS_INTERVAL_MS = 1000;
 static constexpr uint32_t PUMP_MAX_LINES_PER_CALL = 48;
-static constexpr uint32_t I2C_RING_WORDS = 1024;  // power of 2, 4 KB
-static constexpr float LCD_PIO_CLKDIV = 1.0f;     // 40 ns/byte at 150 MHz
+static constexpr float LCD_PIO_BASE_HZ = 150e6f;  // 40 ns/byte at clkdiv 1.0
 
 //-----------------------------------------------------------------------------
 // Globals
@@ -59,12 +63,9 @@ static Ili9488 gLcd;
 static LcdPump gPump;
 static UiMenu gUi;
 static lcdtap::LcdTap* gTap = nullptr;
-static lcdtap::pico2::I2cSlaveState gI2c;
-static lcdtap::pico2::I2cSlaveConfig gI2cCfg;
-static uint32_t gI2cRingBuf[I2C_RING_WORDS];
 
 static CardState gCardState = CardState::NONE;
-static CardProfile gProfile;                    // profile of the running card
+static CardProfile gProfile;                    // profile of the present card
 static ProfileError gProfileError = ProfileError::EMPTY;
 static char gAppsDir[64];
 static uint8_t gFrameBuf[PROFILE_FRAME_MAX];    // EEPROM read / verify buffer
@@ -80,32 +81,28 @@ static inline uint32_t nowMs() { return to_ms_since_boot(get_absolute_time()); }
 static void lcdtapLog(void*, const char* msg) { printf("[lcdtap] %s\n", msg); }
 
 //-----------------------------------------------------------------------------
-// Card bus (I2C1 slave for the LCD stream)
+// Card lifecycle
 //-----------------------------------------------------------------------------
 
-static void cardBusAttach() {
-  gI2c.inst = nullptr;
-  lcdtap::pico2::i2cSlaveInit(&gI2c, gI2cCfg, gI2cRingBuf, I2C_RING_WORDS);
-  gI2c.inst = gTap;
-}
-
-static void cardBusDetach() {
-  lcdtap::pico2::i2cSlaveDeinit(&gI2c);
-  gI2c.inst = nullptr;
-}
-
-//-----------------------------------------------------------------------------
-// Card start / stop
-//-----------------------------------------------------------------------------
-
-static void cardStart(const CardProfile& p) {
+// Profile accepted: configure the bus, hold the card in reset (STOPPED).
+static void cardPrepare(const CardProfile& p) {
   cardIoConfigure(p);
+  cardResetAssert();
+  if (!sdBusOwnedByHost()) sdBusAcquire();
   snprintf(gAppsDir, sizeof(gAppsDir), "%s/%s/Apps", CARDS_DIR, p.id);
+  gCardState = CardState::STOPPED;
+  printf("card prepared: id=%s name=\"%s\" preset=%s isp=%u useTfCard=%d (stopped)\n", p.id,
+         p.name, p.lcdtapPreset, p.ispMethod, p.useTfCard);
+}
+
+// STOPPED -> RUNNING.
+static bool cardStart() {
+  if (gCardState != CardState::STOPPED) return false;
 
   // LcdTap: preset + profile overrides; output raster = host LCD so one
   // fillScanline() call is one LCD line.
   lcdtap::LcdTapConfig cfg;
-  profileBuildLcdTapConfig(p, &cfg);
+  profileBuildLcdTapConfig(gProfile, &cfg);
   cfg.dviWidth = LCD_WIDTH;
   cfg.dviHeight = LCD_HEIGHT;
   cfg.scaleMode = lcdtap::ScaleMode::FIT;
@@ -118,42 +115,55 @@ static void cardStart(const CardProfile& p) {
 
   gTap = new lcdtap::LcdTap(cfg, host);
   if (gTap->getStatus() != lcdtap::Status::OK) {
-    panic("LcdTap init failed (%d)", static_cast<int>(gTap->getStatus()));
+    printf("LcdTap init failed (%d)\n", static_cast<int>(gTap->getStatus()));
+    delete gTap;
+    gTap = nullptr;
+    return false;
   }
 
-  // I2C1 hardware slave on LCIO2/3, feeding the ring buffer from IRQ.
-  gI2cCfg.i2c = i2c1;
-  gI2cCfg.pinSda = PIN_LC_LCD_SDA;
-  gI2cCfg.pinScl = PIN_LC_LCD_SCL;
-  gI2cCfg.slaveAddr = cfg.i2cSlaveAddr;
-  gI2c.dropWords = 0;
-  gI2c.hwOverflowCount = 0;
-  gI2c.backlogMaxWords = 0;
-  cardBusAttach();
+  // Core 1 takes over the capture; core 0 renders from the line queue.
+  Core1Shared& sh = core1Shared();
+  sh.tap = gTap;
+  sh.bus = cfg.busInterface;
+  sh.i2cAddr = cfg.i2cSlaveAddr;
+  sh.queue.clear();
+  core1Call(Core1Cmd::LCDTAP_ATTACH);
+  gPump.init(gTap, &gLcd, &sh.queue);
 
-  gPump.init(gTap, &gLcd);
+  if (cardUseTfCard()) sdBusRelease();  // TF card to the logic card
 
-  printf("card started: id=%s name=\"%s\" preset=%s ctrl=%s bus=%s addr=0x%02x %ux%u\n",
-         p.id, p.name, p.lcdtapPreset,
+  printf("card started: %s bus=%s addr=0x%02x fb=%ux%u\n",
          lcdtap::CONTROLLER_NAMES[static_cast<int>(cfg.controllerFamily)],
          lcdtap::BUS_NAMES[static_cast<int>(cfg.busInterface)], cfg.i2cSlaveAddr,
          cfg.buffWidth, cfg.buffHeight);
 
-  // Reset the card MCU; mirror it into LcdTap so its controller state
-  // matches the init sequence that follows.
-  gTap->inputReset(true);
-  cardResetPulse(10);
-  gTap->inputReset(false);
-  gCardState = CardState::READY;
+  // Release the MCU; mirror the reset into LcdTap.
+  core1Call(Core1Cmd::LCDTAP_RESET_ASSERT);
+  cardKeysRelease();
+  cardResetRelease();
+  core1Call(Core1Cmd::LCDTAP_RESET_RELEASE);
+  gCardState = CardState::RUNNING;
+  return true;
 }
 
+// RUNNING -> STOPPED.
 static void cardStop() {
-  if (gTap) {
-    cardBusDetach();
-    delete gTap;
-    gTap = nullptr;
-  }
+  if (gCardState != CardState::RUNNING) return;
+  cardResetAssert();
+  cardKeysRelease();
+  core1Call(Core1Cmd::LCDTAP_DETACH);
+  delete gTap;
+  gTap = nullptr;
+  if (!sdBusOwnedByHost()) sdBusAcquire();
+  gCardState = CardState::STOPPED;
+  printf("card stopped\n");
+}
+
+// Any state -> NONE (card removed or profile rewritten).
+static void cardForget() {
+  if (gCardState == CardState::RUNNING) cardStop();
   cardIoRelease();
+  if (!sdBusOwnedByHost()) sdBusAcquire();
   gAppsDir[0] = '\0';
   gCardState = CardState::NONE;
 }
@@ -165,13 +175,21 @@ static void cardStop() {
 static void drawIdleScreen() {
   gLcd.clear(COLOR_BLACK);
   drawTextCentered(gLcd, 120, "WildCardBoy pretest", COLOR_WHITE, COLOR_BLACK, 3);
-  if (gCardState == CardState::INVALID) {
-    char line[48];
-    snprintf(line, sizeof(line), "Profile: %s", profileErrorText(gProfileError));
-    drawTextCentered(gLcd, 200, line, COLOR_RED, COLOR_BLACK, 2);
-    drawTextCentered(gLcd, 240, "HOME > Profile to write one", COLOR_GRAY, COLOR_BLACK, 1);
-  } else {
-    drawTextCentered(gLcd, 200, "No Logic Card", COLOR_YELLOW, COLOR_BLACK, 2);
+  char line[48];
+  switch (gCardState) {
+    case CardState::INVALID:
+      snprintf(line, sizeof(line), "Profile: %s", profileErrorText(gProfileError));
+      drawTextCentered(gLcd, 200, line, COLOR_RED, COLOR_BLACK, 2);
+      drawTextCentered(gLcd, 240, "HOME > Profile to write one", COLOR_GRAY, COLOR_BLACK, 1);
+      break;
+    case CardState::STOPPED:
+      snprintf(line, sizeof(line), "%s stopped", gProfile.id);
+      drawTextCentered(gLcd, 200, line, COLOR_YELLOW, COLOR_BLACK, 2);
+      drawTextCentered(gLcd, 240, "HOME > Start card", COLOR_GRAY, COLOR_BLACK, 1);
+      break;
+    default:
+      drawTextCentered(gLcd, 200, "No Logic Card", COLOR_YELLOW, COLOR_BLACK, 2);
+      break;
   }
   drawTextCentered(gLcd, 300, "HOME: system menu", COLOR_GRAY, COLOR_BLACK, 1);
 }
@@ -183,14 +201,26 @@ static void drawIdleScreen() {
 static void ispProgressWrite(int pct, void*) { gUi.progress("Write", pct); }
 static void ispProgressVerify(int pct, void*) { gUi.progress("Verify", pct); }
 static void eepromProgressWrite(int pct, void*) { gUi.progress("Write", pct); }
+static void ispUsbProgress(const char* stage, int pct, void*) { gUi.progress(stage, pct); }
 
 static CardState hookCardState(void*) { return gCardState; }
+static bool hookTfBusy(void*) { return gCardState == CardState::RUNNING && cardUseTfCard(); }
+static const char* hookCardId(void*) {
+  return (gCardState == CardState::STOPPED || gCardState == CardState::RUNNING) ? gProfile.id : nullptr;
+}
 static const char* hookAppsDir(void*) { return gAppsDir[0] ? gAppsDir : nullptr; }
+static bool hookStartCard(void*) { return cardStart(); }
+static bool hookStopCard(void*) { cardStop(); return true; }
 
-static const char* hookProgramApp(const char* path, void*) {
-  if (gCardState != CardState::READY) return "No Logic Card";
+static bool hasExt(const char* path, const char* ext) {
+  const char* dot = strrchr(path, '.');
+  return dot && strcasecmp(dot, ext) == 0;
+}
+
+// ATtiny85 over SPI ISP. Card is stopped (RESET asserted) on entry and exit.
+static const char* programAppSpi(const char* path) {
   IspPins pins;
-  if (!cardIspPins(&pins)) return "ISP not available";
+  if (!cardIspPins(&pins)) return "ISP pins not in profile";
 
   printf("[prog] loading %s\n", path);
   gUi.progress("Load", 0);
@@ -202,11 +232,6 @@ static const char* hookProgramApp(const char* path, void*) {
   }
   gUi.progress("Load", 100);
   printf("[prog] image: %lu bytes\n", static_cast<unsigned long>(len));
-
-  // Quiesce the card bus: no key drive, no I2C1 slave on LCIO2/3.
-  cardKeysRelease();
-  cardBusDetach();
-  gTap->inputReset(true);
 
   const char* err = nullptr;
   uint64_t t0 = time_us_64();
@@ -245,16 +270,25 @@ static const char* hookProgramApp(const char* path, void*) {
   } while (false);
   uint64_t t1 = time_us_64();
 
-  // Back to game mode: data pins Hi-Z, RESET released (new program starts),
-  // key lines re-armed, I2C1 slave listening again.
+  // Data pins back to Hi-Z, lines re-armed, card held in reset (stopped).
   ispEnd();
   cardIoConfigure(gProfile);
-  cardBusAttach();
-  gTap->inputReset(false);
-
+  cardResetAssert();
   printf("[prog] %s (%llu ms)\n", err ? err : "done",
          static_cast<unsigned long long>((t1 - t0) / 1000));
   return err;
+}
+
+static const char* hookProgramApp(const char* path, void*) {
+  if (gCardState != CardState::RUNNING && gCardState != CardState::STOPPED) return "No Logic Card";
+  const bool uf2 = hasExt(path, ".uf2");
+  const IspMode mode = cardIspMode();
+  if (uf2 && mode != IspMode::USB) return "Card has no USB ISP";
+  if (!uf2 && mode != IspMode::SPI) return uf2 ? "Card has no USB ISP" : "Card has no SPI ISP";
+
+  if (gCardState == CardState::RUNNING) cardStop();  // programming needs the card quiet
+  if (uf2) return ispUsbProgram(path, ispUsbProgress, nullptr);
+  return programAppSpi(path);
 }
 
 static const char* hookValidateProfile(const char* path, char* id, size_t idCap,
@@ -306,8 +340,8 @@ static const char* hookWriteProfile(void*) {
          static_cast<unsigned long>(gStageLen),
          static_cast<unsigned long long>((time_us_64() - t0) / 1000));
 
-  // Tear the running card down; the main loop re-detects it from scratch.
-  cardStop();
+  // Forget the card; the main loop re-detects it from scratch.
+  cardForget();
   return nullptr;
 }
 
@@ -315,20 +349,27 @@ static const char* hookWriteProfile(void*) {
 // Statistics
 //-----------------------------------------------------------------------------
 static void printStats(uint16_t keys, bool keysOk, uint32_t loopsPerSec) {
-  printf("[stat] card=%s keys=0x%04x%s loops=%lu",
-         gCardState == CardState::READY ? "ready" : gCardState == CardState::INVALID ? "invalid" : "none",
-         keys, keysOk ? "" : "(err)", static_cast<unsigned long>(loopsPerSec));
+  static const char* NAMES[] = {"none", "invalid", "stopped", "running"};
+  const Core1Shared& sh = core1Shared();
+  printf("[stat] card=%s keys=0x%04x%s loops=%lu core1=%lu",
+         NAMES[static_cast<int>(gCardState)], keys, keysOk ? "" : "(err)",
+         static_cast<unsigned long>(loopsPerSec), static_cast<unsigned long>(sh.loops));
   if (gTap) {
-    printf(" rxCmd=%lu rxData=%lu unk=%lu(0x%02x) hwrst=%lu drop=%lu ovf=%lu "
-           "backlog=%lu | lines=%lu full=%lu groups=%lu",
+    const LcdtapInputStats& in = lcdtapInputStats();
+    printf(" rxCmd=%lu rxData=%lu unk=%lu(0x%02x) hwrst=%lu drop=%lu ovf=%lu backlog=%lu"
+           " | q=%lu groups=%lu qfull=%lu full1=%lu | lines=%lu full=%lu groups=%lu",
            static_cast<unsigned long>(gTap->getRxCmdBytes()),
            static_cast<unsigned long>(gTap->getRxDataBytes()),
            static_cast<unsigned long>(gTap->getUnknownCmdCount()),
            gTap->getLastUnknownCmd(),
            static_cast<unsigned long>(gTap->getHwResetCount()),
-           static_cast<unsigned long>(gI2c.dropWords),
-           static_cast<unsigned long>(gI2c.hwOverflowCount),
-           static_cast<unsigned long>(gI2c.backlogMaxWords),
+           static_cast<unsigned long>(in.dropWords),
+           static_cast<unsigned long>(in.hwOverflow),
+           static_cast<unsigned long>(in.backlogMax),
+           static_cast<unsigned long>(sh.queue.count()),
+           static_cast<unsigned long>(in.groups),
+           static_cast<unsigned long>(in.queueFull),
+           static_cast<unsigned long>(in.fullRepaints),
            static_cast<unsigned long>(gPump.linesSent()),
            static_cast<unsigned long>(gPump.fullRepaints()),
            static_cast<unsigned long>(gPump.dirtyGroups()));
@@ -340,17 +381,27 @@ static void printStats(uint16_t keys, bool keysOk, uint32_t loopsPerSec) {
 // main
 //-----------------------------------------------------------------------------
 int main() {
+  sysClockInit288();
+
+  // TinyUSB device stack (CDC for stdio) is ours in the dual-role build;
+  // pico_stdio_usb expects it to be up before stdio_init_all().
+  tusb_rhport_init_t devInit = {.role = TUSB_ROLE_DEVICE, .speed = TUSB_SPEED_AUTO};
+  tusb_init(BOARD_TUD_RHPORT, &devInit);
   stdio_init_all();
   printf("\n=== WildCardBoy pretest ===\n");
+  printf("clk_sys %lu Hz, clk_peri %lu Hz\n",
+         static_cast<unsigned long>(clock_get_hz(clk_sys)),
+         static_cast<unsigned long>(clock_get_hz(clk_peri)));
 
-  // TF card mux to the host, SPI0 parked (the card itself is probed when
+  // TF card mux to the host, SPI0 ready (the card itself is probed when
   // the browser opens).
   sdBusInit();
 
   // Host LCD.
   Ili9488::Pins lcdPins = {PIN_LCD_D0, PIN_LCD_DC, PIN_LCD_WR,
                            PIN_LCD_RD, PIN_LCD_CS, PIN_LCD_RST};
-  if (!gLcd.init(pio0, 0, lcdPins, LCD_PIO_CLKDIV)) {
+  const float lcdClkDiv = static_cast<float>(clock_get_hz(clk_sys)) / LCD_PIO_BASE_HZ;
+  if (!gLcd.init(pio0, 0, lcdPins, lcdClkDiv)) {
     panic("LCD PIO init failed");
   }
   {
@@ -369,20 +420,31 @@ int main() {
   drawTextCentered(gLcd, 300, "note: on-board USER button = LCD D7",
                    COLOR_GRAY, COLOR_BLACK, 1);
 
-  // AUX I2C (keypad + card EEPROM).
+  // AUX I2C (keypad + card EEPROM / PCA9555).
   auxI2cInit();
+
+  // Core 1 engine (LcdTap capture / USB host).
+  core1Launch();
 
   // System menu.
   UiHooks hooks;
   hooks.cardState = hookCardState;
+  hooks.tfBusy = hookTfBusy;
+  hooks.cardId = hookCardId;
   hooks.appsDir = hookAppsDir;
   hooks.programApp = hookProgramApp;
   hooks.validateProfile = hookValidateProfile;
   hooks.writeProfile = hookWriteProfile;
+  hooks.startCard = hookStartCard;
+  hooks.stopCard = hookStopCard;
   hooks.user = nullptr;
   gUi.init(&gLcd, hooks);
 
   bool idleShown = false;
+  // A card that answers from the very first probe was present at boot and
+  // starts automatically; once a NAK has been seen (no card / removed) any
+  // later detection is a hot insertion and asks first.
+  bool bootCard = true;
   uint32_t probeOkCount = 0;
   uint32_t lastProbeMs = 0;
   uint32_t lastKeyPollMs = 0;
@@ -399,9 +461,6 @@ int main() {
 
     //--- card detection -------------------------------------------------
     if (gCardState == CardState::NONE) {
-      // One probe per interval; the card counts as present only after
-      // CARD_PROBE_SUCCESS_COUNT consecutive ACKs, then its profile must
-      // validate.
       if (now - lastProbeMs >= CARD_PROBE_INTERVAL_MS || lastProbeMs == 0) {
         lastProbeMs = now;
         if (cardEepromProbe()) {
@@ -417,12 +476,20 @@ int main() {
               printf("card profile OK: id=%s name=\"%s\" preset=%s cbor=%lu bytes\n",
                      gProfile.id, gProfile.name, gProfile.lcdtapPreset,
                      static_cast<unsigned long>(cborLen));
-              if (gUi.isVisible()) gUi.close();  // the pump takes the screen
-              cardStart(gProfile);
+              cardPrepare(gProfile);
+              if (bootCard) {
+                if (gUi.isVisible()) gUi.close();
+                cardStart();
+              } else if (!gUi.isVisible()) {
+                gUi.promptStart();
+              }
+              bootCard = false;
+              idleShown = false;
             } else {
               printf("card profile invalid: %s (len field %lu)\n",
                      profileErrorText(gProfileError), static_cast<unsigned long>(cborLen));
               gCardState = CardState::INVALID;
+              bootCard = false;
               idleShown = false;
             }
           }
@@ -431,26 +498,27 @@ int main() {
             printf("card EEPROM (0x%02x) NAK; ACK streak reset\n", ADDR_CARD_EEPROM);
           }
           probeOkCount = 0;
+          bootCard = false;
           if (!idleShown) {
             printf("no card (EEPROM 0x%02x NAK); retrying every %lu ms\n",
                    ADDR_CARD_EEPROM, static_cast<unsigned long>(CARD_PROBE_INTERVAL_MS));
           }
         }
       }
-    } else if (gCardState == CardState::INVALID) {
-      // Card present but unusable: wait for it to be pulled (NAK) or for a
-      // profile to be written (the writer resets the state itself).
-      if (now - lastProbeMs >= CARD_INVALID_POLL_MS) {
+    } else if (gCardState == CardState::INVALID || gCardState == CardState::STOPPED) {
+      // Card present but not running: notice removal (NAK) so a new card
+      // can be detected from scratch.
+      if (now - lastProbeMs >= CARD_IDLE_POLL_MS) {
         lastProbeMs = now;
         if (!cardEepromProbe()) {
           printf("card removed\n");
-          gCardState = CardState::NONE;
+          cardForget();
           idleShown = false;
         }
       }
     }
 
-    if (!idleShown && gCardState != CardState::READY && !gUi.isVisible()) {
+    if (!idleShown && gCardState != CardState::RUNNING && !gUi.isVisible()) {
       drawIdleScreen();
       idleShown = true;
     }
@@ -469,37 +537,35 @@ int main() {
         if (gUi.isVisible()) {
           gUi.close();
         } else {
-          if (gCardState == CardState::READY) cardKeysRelease();
+          if (gCardState == CardState::RUNNING) cardKeysRelease();
           gUi.open();
         }
       } else if (gUi.isVisible()) {
-        gUi.onKeysPressed(edge);  // may close itself (Launch) or stop the card
-      } else if (gCardState == CardState::READY) {
+        gUi.onKeysPressed(edge);  // may close itself, start/stop the card
+      } else if (gCardState == CardState::RUNNING) {
         cardKeysSet(keys);
       }
     }
 
     //--- menu closed this iteration: hand the screen back -----------------
     if (menuWasVisible && !gUi.isVisible()) {
-      if (gCardState == CardState::READY) {
+      if (gCardState == CardState::RUNNING) {
         gPump.requestFullRepaint();
       } else {
         drawIdleScreen();
         idleShown = true;
       }
     }
-    // Card stopped while the menu was open (profile written): the idle
-    // screen is drawn when the menu closes.
-    if (stateAtTop == CardState::READY && gCardState != CardState::READY) {
+    // Left the running state while the menu was open (stop / programming /
+    // profile rewrite): the idle screen is drawn when the menu closes.
+    if (stateAtTop == CardState::RUNNING && gCardState != CardState::RUNNING) {
       idleShown = gUi.isVisible();
       lastProbeMs = now;
     }
 
-    //--- card LCD stream -> host LCD ---------------------------------------
-    if (gCardState == CardState::READY) {
-      lcdtap::pico2::i2cSlaveProcess(&gI2c);
-      gTap->tick(now);
-      if (!gUi.isVisible()) gPump.process(PUMP_MAX_LINES_PER_CALL);
+    //--- card LCD stream -> host LCD (core 1 feeds the queue) -------------
+    if (gCardState == CardState::RUNNING && !gUi.isVisible()) {
+      gPump.process(PUMP_MAX_LINES_PER_CALL);
     }
 
     //--- periodic stats -----------------------------------------------------

@@ -12,7 +12,16 @@ namespace wcb {
 
 static constexpr uint32_t PROFILE_CBOR_MAX = 4096;
 static constexpr uint32_t PROFILE_FRAME_MAX = 4 + PROFILE_CBOR_MAX + 4;
-static constexpr int NUM_LCIO = 14;
+// LCIO numbering: 0..13 are GPIOs on the bus, 32..47 are the card-side
+// PCA9555 ports (P0_0..P1_7, via LCAUX I2C). 14..31 are unused.
+static constexpr int NUM_LCIO = 48;
+static constexpr int LCIO_GPIO_COUNT = 14;
+static constexpr int LCIO_PCA_FIRST = 32;
+static constexpr int LCIO_PCA_COUNT = 16;
+
+static constexpr bool lcioIsGpio(int i) { return i >= 0 && i < LCIO_GPIO_COUNT; }
+static constexpr bool lcioIsPca(int i) { return i >= LCIO_PCA_FIRST && i < LCIO_PCA_FIRST + LCIO_PCA_COUNT; }
+static constexpr bool lcioIsValid(int i) { return lcioIsGpio(i) || lcioIsPca(i); }
 static constexpr int NUM_BUTTONS = 12;
 static constexpr int ID_MAX = 16;
 static constexpr int NAME_MAX = 64;
@@ -58,6 +67,7 @@ struct CardProfile {
   char id[ID_MAX + 1];
   char name[NAME_MAX + 1];
   PortCfg lcio[NUM_LCIO];
+  bool useTfCard;  // card owns the TF card while running (LCTF_ENAX low)
   char lcdtapPreset[32];
   lcdtap::ConfigPreset lcdtapPresetId;
   struct CfgOverride {
@@ -83,7 +93,8 @@ enum class ProfileError : uint8_t {
   BAD_PORT,          // LCIO index out of range / duplicated / unknown function
   BAD_PORT_MODE,     // inconsistent mode bits (e.g. open-drain with positive logic)
   UNKNOWN_PRESET,    // lcdtap.preset not a LcdTap preset name
-  UNSUPPORTED_LCD_BUS,  // effective LcdTap bus is not I2C (pretest limitation)
+  UNSUPPORTED_LCD_BUS,  // effective LcdTap bus is not I2C / 4-line SPI (pretest limitation)
+  MISSING_PORT,      // a required port (e.g. RESET/BOOTSEL for USB ISP) is absent
   BAD_KEYMAP,
 };
 
@@ -105,5 +116,7 @@ void profileBuildLcdTapConfig(const CardProfile& p, lcdtap::LcdTapConfig* cfg);
 
 // Helpers for the bus configuration.
 int profileFindPort(const PortCfg* ports, uint8_t function);  // LCIO index or -1
+// Search the isp table first, then lcio (for RESET / BOOTSEL).
+int profileFindIspOrLcioPort(const CardProfile& p, uint8_t function);
 
 }  // namespace wcb

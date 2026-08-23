@@ -6,7 +6,15 @@ import { CONFIG_BY_ID, PRESET_NAMES } from './lcdtap_config.js';
 export const FORMAT = 'WCBCARD';
 export const ID_MAX_BYTES = 16;
 export const NAME_MAX_BYTES = 64;
-export const NUM_LCIO = 14;
+// LCIO numbering: 0..13 = bus GPIOs, 32..47 = card-side PCA9555 ports
+// (P0_0..P1_7 via LCAUX I2C). 14..31 do not exist.
+export const NUM_LCIO = 14;  // GPIO LCIOs
+export const LCIO_PCA_FIRST = 32;
+export const LCIO_PCA_COUNT = 16;
+export const LCIO_GPIO_LIST = Array.from({ length: NUM_LCIO }, (_, i) => i);
+export const LCIO_PCA_LIST = Array.from({ length: LCIO_PCA_COUNT }, (_, i) => LCIO_PCA_FIRST + i);
+export const isPcaLcio = i => i >= LCIO_PCA_FIRST && i < LCIO_PCA_FIRST + LCIO_PCA_COUNT;
+export const isValidLcio = i => (i >= 0 && i < NUM_LCIO) || isPcaLcio(i);
 
 export const FUNCTIONS = [
   { v: 0, name: 'Unused' },
@@ -40,16 +48,20 @@ export const LCIO_HINTS = [
   'LCD SDA (I2C) / SCK (SPI) / WR (PAR)',
   'LCD SCL (I2C) / MOSI (SPI) / D0 (PAR)',
   'LCD DC (SPI) / D1 (PAR)',
-  'LCD D2 (PAR) / TF MISO / KEY L',
-  'LCD D3 (PAR) / TF CS / KEY R',
-  'LCD D4 (PAR) / TF SCK / KEY U',
+  'LCD D2 (PAR) / KEY L',
+  'LCD D3 (PAR) / KEY R',
+  'LCD D4 (PAR) / KEY U',
   'LCD D5 (PAR) / TF MOSI / KEY D',
-  'LCD D6 (PAR) / KEY A',
-  'LCD D7 (PAR) / KEY B',
-  'LCD DC (PAR) / KEY START',
+  'LCD D6 (PAR) / TF CS / KEY A',
+  'LCD D7 (PAR) / TF SCK / KEY B',
+  'LCD DC (PAR) / TF MISO / KEY START',
   'KEY SELECT',
   '',
 ];
+export function lcioHint(i) {
+  if (isPcaLcio(i)) { const n = i - LCIO_PCA_FIRST; return `PCA9555 P${n >> 3}_${n & 7}`; }
+  return LCIO_HINTS[i] ?? '';
+}
 
 export const DEFAULT_PROFILE = {
   format: FORMAT,
@@ -115,7 +127,9 @@ export function normalize(src) {
     format: typeof s.format === 'string' ? s.format : FORMAT,
     id: s.id == null ? '' : String(s.id),
     name: s.name == null ? '' : String(s.name),
-    lcio: copyUnknown({ ports: normalizePorts(lcio.ports) }, lcio, ['ports']),
+    lcio: copyUnknown(
+      Object.assign(lcio.useTfCard === true ? { useTfCard: true } : {}, { ports: normalizePorts(lcio.ports) }),
+      lcio, ['ports', 'useTfCard']),
     lcdtap: (() => {
       const o = { preset: lcdtap.preset == null ? '' : String(lcdtap.preset) };
       if (isObj(lcdtap.cfg)) {
@@ -155,7 +169,7 @@ export function validate(p) {
   const checkPorts = (list, label, allowed) => {
     const seen = new Set();
     for (const q of list) {
-      if (q.i < 0 || q.i >= NUM_LCIO) err(`${label}: LCIO${q.i} is out of range (0-${NUM_LCIO - 1})`);
+      if (!isValidLcio(q.i)) err(`${label}: LCIO${q.i} is not a valid port (0-${NUM_LCIO - 1}, ${LCIO_PCA_FIRST}-${LCIO_PCA_FIRST + LCIO_PCA_COUNT - 1})`);
       if (seen.has(q.i)) err(`${label}: LCIO${q.i} listed twice`);
       seen.add(q.i);
       if (!allowed.has(q.f)) err(`${label}: LCIO${q.i}: unknown function ${q.f}`);
@@ -163,11 +177,29 @@ export function validate(p) {
       const dir = q.m & (MODE.INPUT | MODE.OUTPUT | MODE.OPEN_DRAIN);
       if (dir !== 0 && dir !== MODE.INPUT && dir !== MODE.OUTPUT && dir !== MODE.OPEN_DRAIN) warn(`${label}: LCIO${q.i}: mode ${q.m} mixes input/output/open-drain`);
       if ((q.m & MODE.PULL_UP) && (q.m & MODE.PULL_DOWN)) warn(`${label}: LCIO${q.i}: both pull-up and pull-down set`);
+      if (dir === MODE.OPEN_DRAIN && !(q.m & MODE.NEGATIVE)) err(`${label}: LCIO${q.i}: open-drain output needs negative logic`);
       if (q.f !== 0 && dir === 0) warn(`${label}: LCIO${q.i}: function set but direction is "unused"`);
+      if (isPcaLcio(q.i)) {
+        if (dir !== 0 && dir !== MODE.OUTPUT && dir !== MODE.OPEN_DRAIN) err(`${label}: LCIO${q.i}: PCA9555 ports must be OUTPUT or open-drain`);
+        if (q.m & (MODE.PULL_UP | MODE.PULL_DOWN)) warn(`${label}: LCIO${q.i}: pull settings are ignored on PCA9555 ports`);
+        if (q.f >= 32) err(`${label}: LCIO${q.i}: RESET/BOOTSEL/ISP cannot be on a PCA9555 port`);
+      }
     }
   };
   checkPorts(p.lcio.ports, 'lcio', FUNCTION_VALUES);
   checkPorts(p.isp.ports, 'isp', new Set(ISP_FUNCTIONS.map(f => f.v)));
+
+  const hasPort = (list, f) => list.some(q => q.f === f && (q.m & (MODE.INPUT | MODE.OUTPUT | MODE.OPEN_DRAIN)) !== 0);
+  const hasAny = f => hasPort(p.isp.ports, f) || hasPort(p.lcio.ports, f);
+  if (p.isp.method === 16) {
+    if (!hasAny(32)) err('isp: USB ISP needs a RESET (32) port');
+    if (!hasAny(33)) err('isp: USB ISP needs a BOOTSEL (33) port');
+  } else if (p.isp.method === 1) {
+    for (const [f, name] of [[36, 'MOSI'], [35, 'SCK'], [37, 'MISO']]) {
+      if (!hasPort(p.isp.ports, f)) err(`isp: SPI ISP needs an ISP ${name} (${f}) port`);
+    }
+    if (!hasAny(32)) err('isp: SPI ISP needs a RESET (32) port');
+  }
 
   if (!PRESET_NAMES.includes(p.lcdtap.preset)) err(`lcdtap.preset "${p.lcdtap.preset}" is not a LcdTap preset name`);
   if (p.lcdtap.cfg) {

@@ -65,6 +65,10 @@ int main(int argc, char** argv) {
   assert(profileFindPort(p.lcio, func::RESET) == 13);
   assert(profileFindPort(p.isp, func::ISP_SCK) == 3);
   assert(profileFindPort(p.lcio, func::TF) == -1);
+  assert(!p.useTfCard);
+  assert(lcioIsValid(0) && lcioIsValid(13) && !lcioIsValid(14) && !lcioIsValid(31) &&
+         lcioIsValid(32) && lcioIsValid(47) && !lcioIsValid(48));
+  assert(lcioIsPca(40) && !lcioIsGpio(40) && lcioIsGpio(5));
 
   lcdtap::LcdTapConfig cfg;
   profileBuildLcdTapConfig(p, &cfg);
@@ -103,13 +107,30 @@ int main(int argc, char** argv) {
     assert(profileParseFrame(od.data(), od.size(), &p, &n) == ProfileError::BAD_PORT_MODE);
   }
 
-  // Unsupported LCD bus: inject lcdtap.cfg is hard to patch in place; instead
-  // check that the effective-config path honours overrides.
+  // Effective-config path honours overrides.
   CardProfile q = p;
   q.lcdtapCfgCount = 1;
-  q.lcdtapCfg[0] = {lcdtap::Configs::BUS_INTERFACE, static_cast<int16_t>(lcdtap::BusType::SPI_4LINE)};
+  q.lcdtapCfg[0] = {lcdtap::Configs::BUS_INTERFACE, static_cast<int16_t>(lcdtap::BusType::PARALLEL)};
   profileBuildLcdTapConfig(q, &cfg);
-  assert(cfg.busInterface == lcdtap::BusType::SPI_4LINE);
+  assert(cfg.busInterface == lcdtap::BusType::PARALLEL);
+
+  // A PP-style frame passed on the command line (optional second argument):
+  // must parse, use the TF card and have USB ISP with RESET + BOOTSEL.
+  if (argc > 2) {
+    std::vector<uint8_t> pp = loadHex(argv[2]);
+    CardProfile r;
+    ProfileError pe = profileParseFrame(pp.data(), pp.size(), &r, &n);
+    printf("pp parse: %s (cbor %u bytes) id=%s useTfCard=%d isp=%u\n", profileErrorText(pe), n, r.id,
+           r.useTfCard, r.ispMethod);
+    assert(pe == ProfileError::OK);
+    assert(r.useTfCard);
+    assert(r.ispMethod == isp_method::USB_MSC);
+    assert(profileFindIspOrLcioPort(r, func::RESET) == 13);
+    assert(profileFindIspOrLcioPort(r, func::BOOTSEL) == 12);
+    assert(r.lcio[32].f == 16 && (r.lcio[32].m & mode::DIR_MASK) == mode::OUTPUT);
+    profileBuildLcdTapConfig(r, &cfg);
+    assert(cfg.busInterface == lcdtap::BusType::SPI_4LINE);
+  }
 
   printf("ok\n");
   return 0;

@@ -80,19 +80,53 @@ void UiMenu::close() {
 // HOME
 //-----------------------------------------------------------------------------
 
-static const char* HOME_ITEMS[] = {"Launch", "Apps", "Profile"};
 static constexpr int HOME_ITEM_COUNT = 3;
+
+static const char* cardStateName(CardState st) {
+  switch (st) {
+    case CardState::NONE: return "no card";
+    case CardState::INVALID: return "invalid profile";
+    case CardState::STOPPED: return "stopped";
+    case CardState::RUNNING: return "running";
+  }
+  return "?";
+}
 
 void UiMenu::drawHome() {
   clearScreen();
-  textRow(0, " WildCardBoy", COL_TITLE, COL_BG);
+  const CardState st = hooks_.cardState(hooks_.user);
+  const char* id = hooks_.cardId ? hooks_.cardId(hooks_.user) : nullptr;
+  char line[COLS + 1];
+  snprintf(line, sizeof(line), " WildCardBoy  [%s%s%s]", id ? id : "", id ? ": " : "",
+           cardStateName(st));
+  textRow(0, line, COL_TITLE, COL_BG);
+  const char* items[HOME_ITEM_COUNT] = {
+      (st == CardState::RUNNING) ? "Stop card" : "Start card", "Apps", "Profile"};
   for (int i = 0; i < HOME_ITEM_COUNT; ++i) {
-    char line[COLS + 1];
-    snprintf(line, sizeof(line), " %c %s", (i == homeCursor_) ? '>' : ' ',
-             HOME_ITEMS[i]);
-    textRow(2 + i, line, COL_TEXT, (i == homeCursor_) ? COL_SEL_BG : COL_BG);
+    snprintf(line, sizeof(line), " %c %s", (i == homeCursor_) ? '>' : ' ', items[i]);
+    bool dim = (i == 0 && st != CardState::RUNNING && st != CardState::STOPPED);
+    textRow(2 + i, line, dim ? COL_HELP : COL_TEXT, (i == homeCursor_) ? COL_SEL_BG : COL_BG);
   }
   footer("U/D:Select  A:Open  HOME:Close");
+}
+
+void UiMenu::drawPromptStart(const char* headline) {
+  clearScreen();
+  const char* id = hooks_.cardId ? hooks_.cardId(hooks_.user) : nullptr;
+  char line[COLS + 1];
+  if (headline) {
+    snprintf(line, sizeof(line), "  %s", headline);
+    textRow(1, line, COL_OK, COL_BG);
+  }
+  snprintf(line, sizeof(line), "  Start card %s?", id ? id : "");
+  textRow(3, line, COL_TITLE, COL_BG);
+  textRow(5, "   A:Start    B:Keep stopped", COL_HELP, COL_BG);
+  footer("A:Start  B:Keep stopped");
+}
+
+void UiMenu::promptStart() {
+  state_ = State::PROMPT_START;
+  drawPromptStart(nullptr);
 }
 
 //-----------------------------------------------------------------------------
@@ -310,7 +344,8 @@ void UiMenu::startJob() {
   if (purpose_ == Purpose::PROFILE) {
     err = hooks_.writeProfile ? hooks_.writeProfile(hooks_.user) : "no writer";
   } else {
-    if (hooks_.cardState(hooks_.user) != CardState::READY) {
+    const CardState st = hooks_.cardState(hooks_.user);
+    if (st != CardState::RUNNING && st != CardState::STOPPED) {
       showMessage("No Logic Card", nullptr, State::BROWSER);
       return;
     }
@@ -324,8 +359,9 @@ void UiMenu::startJob() {
     showMessage("Done", "Card will be re-detected", State::HOME);
     textRow(3, "  Done", COL_OK, COL_BG);
   } else {
-    showMessage("Done", "Press HOME to return to the game", State::BROWSER);
-    textRow(3, "  Done", COL_OK, COL_BG);
+    // The card is stopped now; offer to start it with the new app.
+    state_ = State::PROMPT_START;
+    drawPromptStart("Done");
   }
 }
 
@@ -384,11 +420,21 @@ void UiMenu::onKeysPressed(uint16_t edge) {
         if (homeCursor_ < HOME_ITEM_COUNT - 1) homeCursor_++;
         drawHome();
       } else if (edge & HKEY_A) {
+        const CardState st = hooks_.cardState(hooks_.user);
         if (homeCursor_ == 0) {
-          close();  // Launch
+          if (st == CardState::RUNNING) {
+            hooks_.stopCard(hooks_.user);
+            drawHome();
+          } else if (st == CardState::STOPPED) {
+            if (hooks_.startCard(hooks_.user)) close(); else showMessage("Cannot start card", nullptr, State::HOME);
+          } else {
+            showMessage("No Logic Card", nullptr, State::HOME);
+          }
+        } else if (hooks_.tfBusy && hooks_.tfBusy(hooks_.user)) {
+          showMessage("TF card is in use by the card", "Stop the card first", State::HOME);
         } else if (homeCursor_ == 1) {
-          if (hooks_.cardState(hooks_.user) != CardState::READY) {
-            showMessage("No Logic Card", "Apps needs a running card", State::HOME);
+          if (st != CardState::RUNNING && st != CardState::STOPPED) {
+            showMessage("No Logic Card", "Apps needs a card with a profile", State::HOME);
             break;
           }
           openBrowser(Purpose::APP, hooks_.appsDir ? hooks_.appsDir(hooks_.user) : nullptr);
@@ -445,6 +491,18 @@ void UiMenu::onKeysPressed(uint16_t edge) {
           state_ = State::HOME;
           drawHome();
         }
+      }
+      break;
+
+    case State::PROMPT_START:
+      if (edge & HKEY_A) {
+        if (hooks_.startCard && !hooks_.startCard(hooks_.user)) {
+          showMessage("Cannot start card", nullptr, State::HOME);
+          break;
+        }
+        close();
+      } else if (edge & HKEY_B) {
+        close();
       }
       break;
   }

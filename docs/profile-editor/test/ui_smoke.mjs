@@ -38,6 +38,8 @@ assert.deepEqual(json(), normalize(DEFAULT_PROFILE));
 assert.equal($('#f-id').value, 'TJP');
 assert.equal($('#f-preset').value, 'Tinyjoypad');
 assert.equal($('#t-lcio tbody').children.length, 14);
+assert.equal($('#t-lcio-pca tbody').children.length, 16);
+assert.equal($('#t-isp tbody').children.length, 14);
 assert.equal($('#t-cfg tbody').children.length, 20);
 assert.equal($('#t-keymap tbody').children.length, 12);
 assert.equal($('#btn-export-hex').disabled, false);
@@ -55,6 +57,23 @@ pull0.value = '8'; fire(pull0, 'change');       // pull-up
 row0.querySelector('input[type=checkbox]').checked = true;
 fire(row0.querySelector('input[type=checkbox]'), 'change');
 assert.deepEqual(json().lcio.ports[0], { i: 0, f: 21, m: 4 | 8 | 32 });
+
+// PCA9555 row: LCIO32 -> Left button, output, negative; pull select is disabled.
+const pcaRow = $('#t-lcio-pca tbody').children[0];
+const [pfn, pdir, ppull] = pcaRow.querySelectorAll('select');
+assert.equal(ppull.disabled, true);
+assert.equal([...pdir.options].map(o => o.value).join(','), '0,2,4');
+pfn.value = '16'; fire(pfn, 'change');
+pdir.value = '2'; fire(pdir, 'change');
+pcaRow.querySelector('input[type=checkbox]').checked = true;
+fire(pcaRow.querySelector('input[type=checkbox]'), 'change');
+assert.deepEqual(json().lcio.ports.find(p => p.i === 32), { i: 32, f: 16, m: 2 | 32 });
+
+// useTfCard checkbox
+$('#f-usetf').checked = true; fire($('#f-usetf'), 'change');
+assert.equal(json().lcio.useTfCard, true);
+$('#f-usetf').checked = false; fire($('#f-usetf'), 'change');
+assert.equal(json().lcio.useTfCard, undefined);
 
 const km8 = $('#t-keymap tbody').children[8].querySelector('select');  // START
 km8.value = '8'; fire(km8, 'change');
@@ -81,7 +100,8 @@ const edited = json();
 edited.id = 'XYZ';
 edited.lcdtap.preset = 'Arduboy';
 edited.isp.method = 16;
-edited.lcio.ports = [{ i: 13, f: 32, m: 36 }];
+edited.lcio.ports = [{ i: 13, f: 32, m: 36 }, { i: 40, f: 20, m: 34 }];
+edited.lcio.useTfCard = true;
 $('#json').value = JSON.stringify(edited);
 fire($('#json'), 'input');
 await sleep(400);
@@ -91,6 +111,10 @@ assert.equal($('#f-isp-method').value, '16');
 assert.equal(fn0.value, '0');
 const [fn13] = $('#t-lcio tbody').children[13].querySelectorAll('select');
 assert.equal(fn13.value, '32');
+assert.equal($('#f-usetf').checked, true);
+const [fn40, dir40] = $('#t-lcio-pca tbody').children[8].querySelectorAll('select');
+assert.equal(fn40.value, '20');
+assert.equal(dir40.value, '2');
 // With Arduboy (SPI) the I2C address row must be disabled now.
 assert.equal(i2cRow.classList.contains('disabled'), true);
 

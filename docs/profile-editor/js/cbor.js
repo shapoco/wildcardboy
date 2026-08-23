@@ -2,8 +2,9 @@
 //
 // encode(): definite-length only; integers (major 0/1), text strings
 // (major 3), arrays (major 4), maps with text keys (major 5, insertion
-// order). Anything else (bool, null, float, non-integer) throws, so a
-// profile that the firmware cannot parse is never produced.
+// order) and the simple values true/false (major 7). Anything else (null,
+// float, non-integer) throws, so a profile that the firmware cannot parse
+// is never produced.
 //
 // decode(): accepts the above plus byte strings, indefinite lengths and the
 // simple values true/false/null, so foreign images still load.
@@ -33,7 +34,9 @@ class Writer {
 }
 
 function encodeValue(w, v, path) {
-  if (typeof v === 'number') {
+  if (typeof v === 'boolean') {
+    w.byte(v ? 0xF5 : 0xF4);
+  } else if (typeof v === 'number') {
     if (!Number.isInteger(v)) throw new Error(`CBOR: ${path}: non-integer number ${v}`);
     if (v >= 0) w.head(0, v); else w.head(1, -1 - v);
   } else if (typeof v === 'string') {

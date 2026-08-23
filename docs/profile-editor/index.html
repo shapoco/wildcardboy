@@ -40,8 +40,18 @@
 
     <h2>LCIO ports</h2>
     <p class="note">Signal roles of LCD / TF / keypad interfaces are fixed per LCIO (see spec/02_wildcardbus.md); the function only marks who owns the pin.</p>
+    <div class="field">
+      <label for="f-usetf">TF card</label>
+      <div><label><input id="f-usetf" type="checkbox"> The card uses the TF card while running (LCTF_ENAX low; the host cannot access it)</label></div>
+    </div>
     <table class="ports" id="t-lcio">
       <thead><tr><th>LCIO</th><th>Function</th><th>Direction</th><th>Pull</th><th class="neg">Neg.</th><th>Fixed roles</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <h3>PCA9555 ports (LCIO32-47, via LCAUX I2C)</h3>
+    <p class="note">Output or open-drain (direction switching); pull settings are ignored (the chip has weak pull-ups).</p>
+    <table class="ports" id="t-lcio-pca">
+      <thead><tr><th>LCIO</th><th>Function</th><th>Direction</th><th>Pull</th><th class="neg">Neg.</th><th>Port</th></tr></thead>
       <tbody></tbody>
     </table>
 

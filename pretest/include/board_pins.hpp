@@ -47,6 +47,7 @@ static constexpr uint PIN_LCAUX_SCL = 29;
 static constexpr uint32_t AUX_I2C_BAUD = 400 * 1000;
 
 static constexpr uint8_t ADDR_HOST_KEYPAD = 0x21;  // PCA9555 (host, HAUX)
+static constexpr uint8_t ADDR_CARD_KEYPAD = 0x20;  // PCA9555 (card, LCAUX) = LCIO32-47
 static constexpr uint8_t ADDR_CARD_EEPROM = 0x50;  // 24LC256 (card, LCAUX)
 
 // Host keypad bits as returned by PCA9555 (P0 = bits 0..7, P1 = bits 8..15).
@@ -74,6 +75,17 @@ static constexpr uint16_t HKEY_HOME = 1u << 12;
 static constexpr uint PIN_LCIO_BASE = 0;
 static constexpr uint PIN_LC_LCD_SDA = 2;  // LCIO2 (I2C1 SDA)
 static constexpr uint PIN_LC_LCD_SCL = 3;  // LCIO3 (I2C1 SCL)
+
+// Logic card USB (PIO-USB host). DM must be DP + 1.
+static constexpr uint PIN_LCUSB_DP = 30;
+static constexpr uint PIN_LCUSB_DM = 31;
+
+// PIO block assignment: pio0 = host LCD (8080), pio1 = PIO-USB host,
+// pio2 = LcdTap SPI capture.
+static constexpr uint PIO_USB_INDEX = 1;
+
+// System clock (sys_clock.hpp). Peripheral dividers are derived from it.
+static constexpr uint32_t SYS_CLOCK_HZ = 288'000'000;
 
 // TF card layout (see spec/05_tf_card.md).
 static constexpr const char* CARDS_DIR = "/WCB/Cards";

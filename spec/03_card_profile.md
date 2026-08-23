@@ -19,7 +19,10 @@ CBOR オブジェクトの内容は次の通り。
   "format": "WCBCARD", // 固定値
   "id": "<カードID>", // 最大 16 バイト (ヌル終端除く)
   "name": "<カード名>", // 最大 64 バイト (ヌル終端除く)
-  "lcio": { // ロジックカードの汎用 I/O の設定
+
+  // ロジックカードの汎用 I/O の設定
+  "lcio": {
+    "useTfCard": <false|true>, // TF カード I/F を使用する場合は true。省略時は false。
     "ports": [
       {
         "i": <LCIO番号>,
@@ -29,13 +32,17 @@ CBOR オブジェクトの内容は次の通り。
       ...
     ]
   },
-  "lcdtap": { // ロジックカードの LCD I/F の設定
+
+  // ロジックカードの LCD I/F の設定
+  "lcdtap": {
     "preset": "<LcdTap のプリセット名>",
     "cfg": { // プリセットから変更する場合
       (LcdTap の設定を CBOR 化したもの)
     }
   },
-  "isp": { // ロジックカード上の MCU へのプログラム書き込みに使用する ISP プロトコル
+
+  // ロジックカード上の MCU へのプログラム書き込みに使用する ISP プロトコル
+  "isp": {
     "method": <ISPプロトコル番号>,
     "ports": [ // LCIO を使って書き込みを行う場合
       {
@@ -46,7 +53,9 @@ CBOR オブジェクトの内容は次の通り。
       ...
     ]
   },
-  "keymap": { // 本体側ボタンとロジックカード側ボタンの対応関係
+
+  // 本体側ボタンとロジックカード側ボタンの対応関係
+  "keymap": {
     "map": [
       {
         "s": <物理ボタン番号>,
@@ -57,6 +66,20 @@ CBOR オブジェクトの内容は次の通り。
   }
 }
 ```
+
+## LCIO 番号
+
+LCIO 番号は次の通り。
+
+|LCIO番号|信号名|
+|---|---|
+|0-13|LCIO0-13|
+|32-39|PCA9555 の P0_0-P0_7 (I2C 経由)|
+|40-47|PCA9555 の P1_0-P1_7 (I2C 経由)|
+
+LCIO32-47 はロジックカード上の PCA9555 (devaddr=0x20, LCAUX 経由) のポートであり、モードは `OUTPUT` または `OPEN_DRAIN` (+ `負論理`) を使用できる。
+オープンドレイン出力は PCA9555 の CONFIG レジスタによる入出力切替 (アサート = 出力 Low、解放 = 入力) で実現する。
+プルアップ/プルダウンの指定は無視される (入力時は PCA9555 内蔵の弱いプルアップ)。
 
 ## ポートの機能番号
 
@@ -133,6 +156,9 @@ ISP プロトコル番号は次の通り。
 
 LCIO のポート設定と LcdTap/ISP の設定が衝突する場合は後者を優先する。
 
+`isp.method` が 16 (USB) の場合、`isp.ports` (または `lcio.ports`) に RESET (32) と BOOTSEL (33) のポートが必要である。
+`lcio.useTfCard` が true のロジックカードは、動作中に TF カードを占有する (LCTF_ENAX=Low)。
+
 キーマップのボタン番号 `d` と LCIO の機能番号 `f` は `f = 16 + d` の関係にある。
 キーマップに現れない本体側ボタンは、ロジックカードへは送られない。
 
@@ -150,7 +176,7 @@ LCIO のポート設定と LcdTap/ISP の設定が衝突する場合は後者を
 CBOR の符号化は次の制約に従う (ホスト側パーサの簡略化のため)。
 
 - definite length のみ (indefinite length は不使用)
-- 整数は CBOR の非負整数 (major type 0) と負整数 (major type 1) のみ (`lcdtap.cfg` の `intfFmtOvr` は -1 = Off)。浮動小数点・タグ・バイト列は不使用
+- 整数は CBOR の非負整数 (major type 0) と負整数 (major type 1) のみ (`lcdtap.cfg` の `intfFmtOvr` は -1 = Off)。真偽値は major type 7 の `true` / `false` (`useTfCard`)。浮動小数点・タグ・バイト列は不使用
 - マップのキーは text string
 - `id` / `name` の長さ制限は UTF-8 バイト数で数える
 

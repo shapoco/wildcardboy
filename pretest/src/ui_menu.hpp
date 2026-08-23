@@ -2,11 +2,12 @@
 
 // System menu + file browser drawn directly on the host LCD (text_draw).
 //
-//   HOME     : Launch / Apps / Profile
-//   BROWSER  : TF card browser (purpose: app image or card profile)
-//   CONFIRM  : "Write <file>?" / "Overwrite card profile?"  A = yes, B = no
-//   PROGRAM  : progress screen while the host programs the MCU / EEPROM
-//   MESSAGE  : result / error text, A or B returns to the previous screen
+//   HOME         : Start card / Stop card, Apps, Profile
+//   BROWSER      : TF card browser (purpose: app image or card profile)
+//   CONFIRM      : "Write <file>?" / "Overwrite card profile?"  A = yes, B = no
+//   PROGRAM      : progress screen while the host programs the MCU / EEPROM
+//   MESSAGE      : result / error text, A or B returns to the previous screen
+//   PROMPT_START : "Start card?" (after insertion or app programming)
 //
 // The menu never touches LcdTap, the ISP, the EEPROM or the card bus
 // itself; those are reached through UiHooks so main.cpp stays the only
@@ -19,21 +20,26 @@
 
 namespace wcb {
 
-enum class CardState : uint8_t { NONE, INVALID, READY };
+enum class CardState : uint8_t { NONE, INVALID, STOPPED, RUNNING };
 
 struct UiHooks {
   CardState (*cardState)(void* user);
-  // Apps directory of the running card ("/WCB/Cards/<id>/Apps"), or nullptr.
+  // True while the running card owns the TF card (host cannot browse it).
+  bool (*tfBusy)(void* user);
+  const char* (*cardId)(void* user);   // nullptr when no profile
+  // Apps directory of the card ("/WCB/Cards/<id>/Apps"), or nullptr.
   const char* (*appsDir)(void* user);
-  // Blocking. Must call UiMenu::progress() as it goes. Returns nullptr on
-  // success or a short error message.
+  // Blocking. Stops the card if it is running and leaves it stopped. Must
+  // call UiMenu::progress() as it goes. Returns nullptr on success or a
+  // short error message.
   const char* (*programApp)(const char* path, void* user);
   // Load + validate a profile .hex; fills id/name for the confirmation.
-  // Returns nullptr when valid or a short error message.
   const char* (*validateProfile)(const char* path, char* id, size_t idCap,
                                  char* name, size_t nameCap, void* user);
   // Write the profile validated last (blocking, calls progress()).
   const char* (*writeProfile)(void* user);
+  bool (*startCard)(void* user);
+  bool (*stopCard)(void* user);
   void* user;
 };
 
@@ -49,6 +55,9 @@ class UiMenu {
   void open();
   void close();
 
+  // Standalone "Start card <id>?" prompt (A = start, B = keep stopped).
+  void promptStart();
+
   // Feed pressed-edge bitmask (HKEY_*; HOME is handled by the caller).
   void onKeysPressed(uint16_t edge);
 
@@ -56,7 +65,7 @@ class UiMenu {
   void progress(const char* stage, int percent);
 
  private:
-  enum class State : uint8_t { HIDDEN, HOME, BROWSER, CONFIRM, PROGRAM, MESSAGE };
+  enum class State : uint8_t { HIDDEN, HOME, BROWSER, CONFIRM, PROGRAM, MESSAGE, PROMPT_START };
   enum class Purpose : uint8_t { APP, PROFILE };
 
   struct Entry {
@@ -69,6 +78,7 @@ class UiMenu {
   void drawBrowser();
   void drawConfirm();
   void drawProgramBase();
+  void drawPromptStart(const char* headline);
   void showMessage(const char* line1, const char* line2, State back);
 
   // Browser helpers

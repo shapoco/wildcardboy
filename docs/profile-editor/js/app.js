@@ -1,7 +1,8 @@
 // Card Profile Editor: settings UI <-> JSON <-> EEPROM image (Intel HEX).
 
 import {
-  DEFAULT_PROFILE, FUNCTIONS, ISP_FUNCTIONS, ISP_METHODS, BUTTONS, LCIO_HINTS, MODE, NUM_LCIO,
+  DEFAULT_PROFILE, FUNCTIONS, ISP_FUNCTIONS, ISP_METHODS, BUTTONS, MODE,
+  LCIO_GPIO_LIST, LCIO_PCA_LIST, isPcaLcio, lcioHint,
   ID_MAX_BYTES, NAME_MAX_BYTES, utf8Len, normalize, validate, hasErrors,
 } from './profile.js';
 import { CONFIG_ENTRIES, PRESET_NAMES, effectiveConfig, isEntryEnabled } from './lcdtap_config.js';
@@ -40,19 +41,23 @@ let suppressUi = false;  // true while renderSettings() writes controls
 // ---------------------------------------------------------------------------
 // Settings panel construction
 // ---------------------------------------------------------------------------
+// Port rows: ui.lcio covers both tables (GPIO 0-13 and PCA9555 32-47),
+// ui.isp only the GPIO table.
 const ui = { lcio: [], isp: [], cfg: [], keymap: [] };
 
-function buildPortTable(tbody, rows, functions) {
+function buildPortTable(tbody, rows, functions, indices) {
   tbody.replaceChildren();
-  for (let i = 0; i < NUM_LCIO; i++) {
+  for (const i of indices) {
+    const pca = isPcaLcio(i);
+    const dirs = pca ? DIRECTIONS.filter(d => d.v !== MODE.INPUT) : DIRECTIONS;  // no input role on PCA9555
     const fn = el('select', { onchange: onUiChange }, functions.map(f => option(f.v, f.name)));
-    const dir = el('select', { onchange: onUiChange }, DIRECTIONS.map(d => option(d.v, d.name)));
-    const pull = el('select', { onchange: onUiChange }, PULLS.map(p => option(p.v, p.name)));
+    const dir = el('select', { onchange: onUiChange }, dirs.map(d => option(d.v, d.name)));
+    const pull = el('select', { onchange: onUiChange, disabled: pca }, PULLS.map(p => option(p.v, p.name)));
     const neg = el('input', { type: 'checkbox', onchange: onUiChange, title: 'Negative logic' });
-    rows.push({ fn, dir, pull, neg });
+    rows.push({ i, fn, dir, pull, neg });
     tbody.append(el('tr', {}, [
       el('td', { text: `LCIO${i}` }), el('td', {}, fn), el('td', {}, dir), el('td', {}, pull),
-      el('td', { class: 'neg' }, neg), el('td', { class: 'hint', text: LCIO_HINTS[i] }),
+      el('td', { class: 'neg' }, neg), el('td', { class: 'hint', text: lcioHint(i) }),
     ]));
   }
 }
@@ -92,8 +97,10 @@ function buildKeymapTable() {
 }
 
 function buildSettings() {
-  buildPortTable($('#t-lcio tbody'), ui.lcio, FUNCTIONS);
-  buildPortTable($('#t-isp tbody'), ui.isp, ISP_FUNCTIONS);
+  buildPortTable($('#t-lcio tbody'), ui.lcio, FUNCTIONS, LCIO_GPIO_LIST);
+  buildPortTable($('#t-lcio-pca tbody'), ui.lcio, FUNCTIONS.filter(f => f.v < 32), LCIO_PCA_LIST);
+  buildPortTable($('#t-isp tbody'), ui.isp, ISP_FUNCTIONS, LCIO_GPIO_LIST);
+  $('#f-usetf').addEventListener('change', onUiChange);
   $('#f-preset').append(...PRESET_NAMES.map(n => option(n, n)));
   $('#f-isp-method').append(...ISP_METHODS.map(m => option(m.v, m.name)));
   buildCfgTable();
@@ -124,7 +131,8 @@ function parseHex(s) {
 // ---------------------------------------------------------------------------
 function renderPorts(rows, ports) {
   const byIdx = new Map(ports.map(p => [p.i, p]));
-  rows.forEach((r, i) => {
+  rows.forEach(r => {
+    const i = r.i;
     const p = byIdx.get(i);
     const f = p ? p.f : 0, m = p ? p.m : 0;
     r.fn.value = String(f);
@@ -165,6 +173,7 @@ function renderSettings() {
     $('#f-name').value = profile.name;
     renderCounters();
     renderPorts(ui.lcio, profile.lcio.ports);
+    $('#f-usetf').checked = profile.lcio.useTfCard === true;
     const presetSel = $('#f-preset');
     presetSel.value = profile.lcdtap.preset;
     if (presetSel.value !== profile.lcdtap.preset) presetSel.value = '';  // unknown preset: show blank
@@ -195,7 +204,8 @@ function renderCounters() {
 // ---------------------------------------------------------------------------
 function readPorts(rows) {
   const ports = [];
-  rows.forEach((r, i) => {
+  rows.forEach(r => {
+    const i = r.i;
     const f = Number(r.fn.value) | 0;
     const m = (Number(r.dir.value) | 0) | (Number(r.pull.value) | 0) | (r.neg.checked ? MODE.NEGATIVE : 0);
     if (f !== 0 || m !== 0) ports.push({ i, f, m });
@@ -208,6 +218,7 @@ function readSettings() {
   p.id = $('#f-id').value;
   p.name = $('#f-name').value;
   p.lcio.ports = readPorts(ui.lcio);
+  if ($('#f-usetf').checked) p.lcio.useTfCard = true; else delete p.lcio.useTfCard;
   const presetSel = $('#f-preset');
   if (presetSel.value !== '') p.lcdtap.preset = presetSel.value;
   const cfg = {};

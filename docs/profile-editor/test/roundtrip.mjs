@@ -22,7 +22,33 @@ assert.deepEqual([...encode(1000)], [0x19, 0x03, 0xE8]);
 assert.deepEqual([...encode('a')], [0x61, 0x61]);
 assert.deepEqual([...encode({ a: [1, 2] })], [0xA1, 0x61, 0x61, 0x82, 0x01, 0x02]);
 assert.throws(() => encode({ x: 1.5 }));
-assert.throws(() => encode({ x: true }));
+assert.deepEqual([...encode({ x: true, y: false })], [0xA2, 0x61, 0x78, 0xF5, 0x61, 0x79, 0xF4]);
+assert.deepEqual(decode(new Uint8Array([0xF5])).value, true);
+assert.throws(() => encode({ x: null }));
+// useTfCard round-trips as a CBOR bool and survives normalize()
+{
+  const p = normalize({ ...DEFAULT_PROFILE, lcio: { useTfCard: true, ports: [] } });
+  assert.equal(p.lcio.useTfCard, true);
+  assert.deepEqual(Object.keys(p.lcio), ['useTfCard', 'ports']);
+  assert.deepEqual(normalize(decode(encode(p)).value), p);
+  assert.equal(normalize({ ...DEFAULT_PROFILE, lcio: { useTfCard: false, ports: [] } }).lcio.useTfCard, undefined);
+}
+// PCA9555 port validation
+{
+  const p = normalize({ ...DEFAULT_PROFILE, lcio: { ports: [{ i: 32, f: 16, m: 34 }, { i: 33, f: 17, m: 36 }, { i: 34, f: 18, m: 33 }, { i: 20, f: 0, m: 1 }] } });
+  const errs = validate(p).filter(m => m.level === 'error').map(m => m.msg);
+  assert.ok(errs.some(m => m.includes('LCIO34') && m.includes('OUTPUT')));  // input is not allowed
+  assert.ok(errs.some(m => m.includes('LCIO20')));
+  assert.ok(!errs.some(m => m.includes('LCIO32')));
+  assert.ok(!errs.some(m => m.includes('LCIO33')));  // open-drain + negative is fine
+}
+// USB ISP needs RESET + BOOTSEL
+{
+  const p = normalize({ ...DEFAULT_PROFILE, isp: { method: 16, ports: [{ i: 13, f: 32, m: 36 }] } });
+  assert.ok(validate(p).some(m => m.level === 'error' && m.msg.includes('BOOTSEL')));
+  const q = normalize({ ...DEFAULT_PROFILE, isp: { method: 16, ports: [{ i: 13, f: 32, m: 36 }, { i: 12, f: 33, m: 36 }] } });
+  assert.ok(!validate(q).some(m => m.level === 'error'));
+}
 assert.deepEqual(decode(new Uint8Array([0x9F, 0x01, 0x02, 0xFF])).value, [1, 2]); // indefinite array
 
 // Profile round trip: cards/TJP/profile.json -> CBOR -> frame -> HEX -> back

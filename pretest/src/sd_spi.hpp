@@ -8,9 +8,16 @@ namespace wcb {
 
 enum class SdCardType : uint8_t { NONE, SD_V1, SD_V2_SC, SD_V2_HC };
 
-// Drive LCTF_ENAX high (TF card to the host) and park the SPI pins. Call
-// once at boot; does not touch the card.
+// Drive LCTF_ENAX high (TF card to the host) and set up SPI0. Call once
+// at boot; does not touch the card.
 void sdBusInit();
+
+// Hand the TF card to the logic card: HTF_* pins Hi-Z, LCTF_ENAX low.
+void sdBusRelease();
+// Take the TF card back: LCTF_ENAX high, SPI0 re-enabled (card re-detected
+// on the next sdInit()).
+void sdBusAcquire();
+bool sdBusOwnedByHost();
 
 // (Re)initialize the card. Returns false if no card answers. Safe to call
 // again after a card swap.

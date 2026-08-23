@@ -25,6 +25,7 @@ const char* profileErrorText(ProfileError e) {
     case ProfileError::BAD_PORT_MODE: return "bad port mode";
     case ProfileError::UNKNOWN_PRESET: return "unknown preset";
     case ProfileError::UNSUPPORTED_LCD_BUS: return "unsupported LCD bus";
+    case ProfileError::MISSING_PORT: return "missing port";
     case ProfileError::BAD_KEYMAP: return "bad keymap";
   }
   return "?";
@@ -92,8 +93,8 @@ static ProfileError decodePorts(QCBORDecodeContext* ctx, const char* label,
     int64_t m = getIntOr(ctx, "m", 0);
     QCBORDecode_ExitMap(ctx);
     if (QCBORDecode_GetError(ctx) != QCBOR_SUCCESS) return ProfileError::CBOR_ERROR;
-    if (i < 0 || i >= NUM_LCIO) {
-      printf("[profile] %s: LCIO%lld out of range\n", what, static_cast<long long>(i));
+    if (i < 0 || i >= NUM_LCIO || !lcioIsValid(static_cast<int>(i))) {
+      printf("[profile] %s: LCIO%lld is not a valid port number\n", what, static_cast<long long>(i));
       return ProfileError::BAD_PORT;
     }
     if (seen[i]) {
@@ -140,6 +141,18 @@ static ProfileError checkPorts(const PortCfg* ports, const char* what, bool ispT
       printf("[profile] %s: LCIO%d: open-drain output needs negative logic\n", what, i);
       return ProfileError::BAD_PORT_MODE;
     }
+    if (lcioIsPca(i)) {
+      // PCA9555 ports: push-pull or open-drain (direction switching) outputs;
+      // pulls are fixed by the chip.
+      if (dir != mode::OUTPUT && dir != mode::OPEN_DRAIN) {
+        printf("[profile] %s: LCIO%d: PCA9555 ports must be OUTPUT or OPEN_DRAIN\n", what, i);
+        return ProfileError::BAD_PORT_MODE;
+      }
+      if (p.f >= func::RESET) {
+        printf("[profile] %s: LCIO%d: RESET/BOOTSEL/ISP cannot be on a PCA9555 port\n", what, i);
+        return ProfileError::BAD_PORT;
+      }
+    }
     if (p.f == func::TF) printf("[profile] warning: %s: LCIO%d: TF card I/F is not supported by pretest\n", what, i);
     if (p.f == func::BOOTSEL) printf("[profile] warning: %s: LCIO%d: BOOTSEL is not used by pretest\n", what, i);
     if (p.f == func::LCD && i != 2 && i != 3) {
@@ -176,11 +189,15 @@ static ProfileError decodeCbor(const uint8_t* cbor, uint32_t len, CardProfile* o
     return ProfileError::CBOR_ERROR;
   }
 
-  // lcio.ports
+  // lcio.ports / lcio.useTfCard
   QCBORDecode_EnterMapFromMapSZ(&ctx, "lcio");
   if (optional(&ctx)) {
     ProfileError e = decodePorts(&ctx, "ports", out->lcio, "lcio");
     if (e != ProfileError::OK) return e;
+    bool useTf = false;
+    QCBORDecode_GetBoolInMapSZ(&ctx, "useTfCard", &useTf);
+    if (optional(&ctx)) out->useTfCard = useTf;
+    else if (QCBORDecode_GetError(&ctx) != QCBOR_SUCCESS) return ProfileError::CBOR_ERROR;
     QCBORDecode_ExitMap(&ctx);
   }
 
@@ -288,13 +305,28 @@ static ProfileError checkProfile(CardProfile* p) {
 
   lcdtap::LcdTapConfig cfg;
   profileBuildLcdTapConfig(*p, &cfg);
-  if (cfg.busInterface != lcdtap::BusType::I2C) {
-    printf("[profile] LcdTap bus %s is not supported by pretest (I2C only)\n",
+  if (cfg.busInterface != lcdtap::BusType::I2C &&
+      cfg.busInterface != lcdtap::BusType::SPI_4LINE) {
+    printf("[profile] LcdTap bus %s is not supported by pretest (I2C / 4-line SPI only)\n",
            lcdtap::BUS_NAMES[static_cast<int>(cfg.busInterface)]);
     return ProfileError::UNSUPPORTED_LCD_BUS;
   }
 
-  if (p->ispMethod == isp_method::USB_MSC) printf("[profile] warning: ISP over USB is not supported by pretest\n");
+  if (p->ispMethod == isp_method::USB_MSC) {
+    if (profileFindIspOrLcioPort(*p, func::RESET) < 0 ||
+        profileFindIspOrLcioPort(*p, func::BOOTSEL) < 0) {
+      printf("[profile] USB ISP needs RESET and BOOTSEL ports\n");
+      return ProfileError::MISSING_PORT;
+    }
+  } else if (p->ispMethod == isp_method::SPI) {
+    if (profileFindPort(p->isp, func::ISP_MOSI) < 0 || profileFindPort(p->isp, func::ISP_SCK) < 0 ||
+        profileFindPort(p->isp, func::ISP_MISO) < 0 || profileFindIspOrLcioPort(*p, func::RESET) < 0) {
+      printf("[profile] SPI ISP needs MOSI/SCK/MISO and RESET ports\n");
+      return ProfileError::MISSING_PORT;
+    }
+  } else if (p->ispMethod != isp_method::UNUSED) {
+    printf("[profile] warning: unknown ISP method %u\n", p->ispMethod);
+  }
   return ProfileError::OK;
 }
 
@@ -338,6 +370,12 @@ int profileFindPort(const PortCfg* ports, uint8_t function) {
     if (ports[i].f == function && (ports[i].m & mode::DIR_MASK) != 0) return i;
   }
   return -1;
+}
+
+int profileFindIspOrLcioPort(const CardProfile& p, uint8_t function) {
+  int i = profileFindPort(p.isp, function);
+  if (i < 0) i = profileFindPort(p.lcio, function);
+  return i;
 }
 
 }  // namespace wcb

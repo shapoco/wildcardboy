@@ -1,6 +1,10 @@
-# pretest — TJP カード動作テスト用ファームウェア
+# pretest — ロジックカード動作テスト用ファームウェア
 
-本体ハードウェアの事前テスト用の仮ファームウェア。TJP カード (ATtiny85 / Tinyjoypad 互換) を対象とする。
+本体ハードウェアの事前テスト用の仮ファームウェア。TJP カード (ATtiny85 / Tinyjoypad 互換) と
+PP1/PP2 カード (Raspberry Pi Pico / Pico 2、PicoPad 互換) を対象とする。
+
+システムクロックは 288 MHz (`src/sys_clock.cpp`、Pico-PIO-USB の要求する 12 MHz の倍数で、LcdTap の SPI 受信が 62.5 MHz に追従できる)。
+core0 = UI / 本体 LCD 出力 / カード制御、core1 = LcdTap 入力 (I2C または 4 線 SPI) と dirty 走査、または USB ホスト (`src/core1.cpp`)。
 
 ## 動作
 
@@ -12,21 +16,25 @@
    500 ms 毎に EEPROM を確認し、NAK で未検出に戻る)。
    ※ HAUX (GPIO36/37, PCA9555) と LCAUX は同じ I2C0 に属するため、アクセスの度に
    ピン機能を切り替え、使わない側は Hi-Z にする (挿抜の擾乱を本体側バスに波及させない)。
-3. 検出後、**WildCardBus の設定はプロファイルに従う**:
-   - `lcio.ports`: 機能 16-27 (ボタン) と 32 (RESET) のポートをモード (`OUTPUT` / `OPEN_DRAIN` / 負論理 / プル) に従って初期化。
-     LCD I/F (機能 1) は I2C1 スレーブが使う。未使用 LCIO は Hi-Z
-   - `lcdtap.preset` + `cfg` で LcdTap を設定 (I2C スレーブアドレスも実効 cfg から)。**LCD バスは I2C のみ対応**
+3. 検出後、**WildCardBus の設定はプロファイルに従う** (`cardPrepare`)。カードは **停止** 状態 (RESET アサート、LCTF_ENAX=High) になり、
+   本体起動から 3 秒以内に検出できた場合は自動で **動作** 状態へ、それ以外は「Start card <id>?」を表示して A で起動する:
+   - `lcio.ports`: 機能 16-27 (ボタン)、32 (RESET)、33 (BOOTSEL) のポートをモード (`OUTPUT` / `OPEN_DRAIN` / 負論理 / プル) に従って初期化。
+     LCIO32-47 はカード側 PCA9555 (0x20, LCAUX) の出力。LCD I/F (機能 1) は LcdTap の受信が使う。未使用 LCIO は Hi-Z
+   - `lcdtap.preset` + `cfg` で LcdTap を設定 (I2C スレーブアドレスも実効 cfg から)。**LCD バスは I2C (LCIO2/3) と 4 線 SPI (LCIO0-4) に対応**
    - `keymap.map` で本体ボタン → カードボタン (機能 `16+d`) を対応付け
-   - `isp` から SPI ISP の MOSI/SCK/MISO を取得 (Apps の書き込みに使用)
-   - RESET ポートでカード MCU をリセット
-4. 以降ループ:
-   - PCA9555 (0x21, HAUX) の本体キー → キーマップ経由でカードのキー線へ
-   - I2C1 で受けた LCD コマンド → LcdTap → 更新行のみ本体 LCD へ転送
+   - `isp.method` = 1 (SPI, ATtiny85) / 16 (USB MSC, RP2040/RP2350)
+   - `lcio.useTfCard` が true なら動作中は LCTF_ENAX=Low (TF カードをカードに渡し、本体の HTF ピンは Hi-Z)
+4. 動作中のループ:
+   - PCA9555 (0x21, HAUX) の本体キー → キーマップ経由でカードのキー線 (GPIO または カード側 PCA9555) へ
+   - core1: I2C1 / PIO SPI で受けた LCD コマンド → LcdTap → dirty 行をライン群として core0 へ通知 → core0 が本体 LCD へ転送
 
-5. HOME ボタンでシステムメニュー (`Launch` / `Apps` / `Profile`) を開閉。メニュー表示中もカードは動作を続け、
-   LCD 転送だけ止まる。
-   - `Apps`: TF カード (`/WCB/Cards/<id>/Apps/`) のファイルブラウザを開き、`.bin` (生バイナリ) / `.hex` (Intel HEX) を選んで
-     A → 確認 → ATtiny85 へ ISP 書き込み (署名確認 → 消去 → 書き込み → ベリファイ、8 KB 上限、ヒューズは読むだけ)。
+5. HOME ボタンでシステムメニュー (`Start card`/`Stop card` / `Apps` / `Profile`) を開閉。メニュー表示中もカードは動作を続け、
+   LCD 転送だけ止まる。動作中かつ `useTfCard` のときは `Apps` / `Profile` は使えない (先に `Stop card`)。
+   - `Apps`: TF カード (`/WCB/Cards/<id>/Apps/`) のファイルブラウザを開き、ファイルを選んで A → 確認 → 書き込み (動作中なら先に停止する)。
+     完了後に「Start card?」で起動を確認。
+     - `.bin` / `.hex`: ATtiny85 へ SPI ISP (署名確認 → 消去 → 書き込み → ベリファイ、8 KB 上限、ヒューズは読むだけ)
+     - `.uf2`: BOOTSEL + RESET で MCU を BOOTSEL モードにし、core1 の USB ホスト (Pico-PIO-USB + TinyUSB MSC) で
+       UF2 ブロックを直接セクタ書き込み → USB 切断 (= Flash 書き込み完了) を待つ
    - `Profile`: `/WCB/Cards/` からプロファイルの `.hex` ([docs/profile-editor](../docs/profile-editor/) で生成、標準は
      `/WCB/Cards/<id>/profile.hex`) を選ぶと SRAM に展開して長さ / CRC / CBOR を検証し、id / name を表示して
      「Overwrite card profile?」→ A で EEPROM (24LC256) に書き込み → 読み戻し検証 → 稼働中のカードを停止して検出をやり直す。
@@ -40,15 +48,15 @@
 
 ## ISP 書き込み
 
-プロファイルの `isp.ports` にある MOSI/SCK/MISO と RESET ポートをビットバング (~100 kHz)。書き込み中は
-キー線を Hi-Z にし、I2C1 スレーブを停止する。終了時に RESET を解放すると新しいアプリが起動する。
-プロトコルは ATtiny85 固定 (`isp.method` = 1 のみ。USB MSC は未対応)。
+- SPI (`isp.method` = 1): プロファイルの `isp.ports` にある MOSI/SCK/MISO と RESET ポートをビットバング (~100 kHz)。プロトコルは ATtiny85 固定。
+- USB (`isp.method` = 16): RESET + BOOTSEL で BOOTSEL モードへ → MSC マウント (5 s) → UF2 ブロックを LBA 0x100 から連続書き込み →
+  切断待ち (10 s) → RESET アサート。デバッグ CDC (native USB) と PIO-USB ホストは TinyUSB の dual-role 構成
+  (`include/tusb_config.h`、`tinyusb_host_base` を直接リンクして `pico_stdio_usb` を生かしている)。
 
 ## カードプロファイル
 
 CBOR のデコードには [QCBOR](https://github.com/laurencelundblade/QCBOR) (`submodule/QCBOR`) を使用。
-pretest で未対応の項目: LCD バスが I2C 以外 (プロファイル無効として扱う)、TF カード I/F (機能 2)、BOOTSEL、
-I2C キーパッド、ISP over USB (警告ログのみ)。
+pretest で未対応の項目: LCD バスが 3 線 SPI / パラレル (プロファイル無効として扱う)、動作中の抜去検出。
 ホスト側テスト: `test_host/build.sh` (`cards/TJP/profile.hex` のパースとエラー経路)。
 
 ## ビルド

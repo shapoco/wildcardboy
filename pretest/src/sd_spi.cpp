@@ -1,6 +1,7 @@
 #include "sd_spi.hpp"
 
 #include <cstdio>
+#include <initializer_list>
 
 #include "hardware/gpio.h"
 #include "hardware/spi.h"
@@ -92,9 +93,9 @@ static void release() {
 // API
 //-----------------------------------------------------------------------------
 
-void sdBusInit() {
-  gpio_init(PIN_LCTF_ENAX);
-  gpio_set_dir(PIN_LCTF_ENAX, GPIO_OUT);
+static bool sHostOwns = false;
+
+void sdBusAcquire() {
   gpio_put(PIN_LCTF_ENAX, 1);  // TF card belongs to the host controller
 
   gpio_init(PIN_HTF_CS);
@@ -110,6 +111,28 @@ void sdBusInit() {
 
   sType = SdCardType::NONE;
   sReady = false;
+  sHostOwns = true;
+}
+
+void sdBusRelease() {
+  sReady = false;
+  sType = SdCardType::NONE;
+  spi_deinit(spi0);
+  for (uint pin : {PIN_HTF_MISO, PIN_HTF_CS, PIN_HTF_SCK, PIN_HTF_MOSI}) {
+    gpio_init(pin);  // SIO input = Hi-Z
+    gpio_disable_pulls(pin);
+  }
+  gpio_put(PIN_LCTF_ENAX, 0);  // TF card belongs to the logic card
+  sHostOwns = false;
+}
+
+bool sdBusOwnedByHost() { return sHostOwns; }
+
+void sdBusInit() {
+  gpio_init(PIN_LCTF_ENAX);
+  gpio_set_dir(PIN_LCTF_ENAX, GPIO_OUT);
+  gpio_put(PIN_LCTF_ENAX, 1);
+  sdBusAcquire();
 }
 
 bool sdInit() {
