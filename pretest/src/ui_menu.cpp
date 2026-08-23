@@ -58,7 +58,7 @@ void UiMenu::init(Ili9488* lcd, const UiHooks& hooks) {
   lcd_ = lcd;
   hooks_ = hooks;
   state_ = State::HIDDEN;
-  strncpy(path_, APPS_DIR, sizeof(path_) - 1);
+  strncpy(path_, CARDS_DIR, sizeof(path_) - 1);
   path_[sizeof(path_) - 1] = '\0';
 }
 
@@ -80,8 +80,8 @@ void UiMenu::close() {
 // HOME
 //-----------------------------------------------------------------------------
 
-static const char* HOME_ITEMS[] = {"Launch", "Apps"};
-static constexpr int HOME_ITEM_COUNT = 2;
+static const char* HOME_ITEMS[] = {"Launch", "Apps", "Profile"};
+static constexpr int HOME_ITEM_COUNT = 3;
 
 void UiMenu::drawHome() {
   clearScreen();
@@ -230,19 +230,30 @@ void UiMenu::goParent() {
 
 void UiMenu::drawConfirm() {
   clearScreen();
-  textRow(0, " Write to TJP card?", COL_TITLE, COL_BG);
   const char* name = strrchr(selectedPath_, '/');
   name = name ? name + 1 : selectedPath_;
   char line[COLS + 1];
-  snprintf(line, sizeof(line), "  %s", name);
-  textRow(3, line, COL_TEXT, COL_BG);
+  if (purpose_ == Purpose::PROFILE) {
+    textRow(0, " Overwrite card profile?", COL_TITLE, COL_BG);
+    snprintf(line, sizeof(line), "  file: %s", name);
+    textRow(2, line, COL_TEXT, COL_BG);
+    snprintf(line, sizeof(line), "  id:   %s", profileId_);
+    textRow(3, line, COL_TEXT, COL_BG);
+    snprintf(line, sizeof(line), "  name: %s", profileName_);
+    textRow(4, line, COL_TEXT, COL_BG);
+  } else {
+    textRow(0, " Write to card MCU?", COL_TITLE, COL_BG);
+    snprintf(line, sizeof(line), "  %s", name);
+    textRow(3, line, COL_TEXT, COL_BG);
+  }
   textRow(6, "   A:Yes    B:No", COL_HELP, COL_BG);
   footer("A:Write  B:Cancel");
 }
 
 void UiMenu::drawProgramBase() {
   clearScreen();
-  textRow(0, " Programming TJP card", COL_TITLE, COL_BG);
+  textRow(0, purpose_ == Purpose::PROFILE ? " Writing card profile" : " Programming card MCU",
+          COL_TITLE, COL_BG);
   const char* name = strrchr(selectedPath_, '/');
   name = name ? name + 1 : selectedPath_;
   char line[COLS + 1];
@@ -292,24 +303,68 @@ void UiMenu::showMessage(const char* line1, const char* line2, State back) {
   footer("A/B:Back");
 }
 
-void UiMenu::startProgram() {
-  if (!hooks_.cardPresent || !hooks_.cardPresent(hooks_.user)) {
-    showMessage("No Logic Card", nullptr, State::BROWSER);
-    return;
-  }
+void UiMenu::startJob() {
+  const char* err;
   state_ = State::PROGRAM;
   drawProgramBase();
-  const char* err = hooks_.programApp ? hooks_.programApp(selectedPath_,
-                                                          hooks_.user)
-                                      : "no programmer";
+  if (purpose_ == Purpose::PROFILE) {
+    err = hooks_.writeProfile ? hooks_.writeProfile(hooks_.user) : "no writer";
+  } else {
+    if (hooks_.cardState(hooks_.user) != CardState::READY) {
+      showMessage("No Logic Card", nullptr, State::BROWSER);
+      return;
+    }
+    err = hooks_.programApp ? hooks_.programApp(selectedPath_, hooks_.user)
+                            : "no programmer";
+  }
   if (err) {
     showMessage("FAILED", err, State::BROWSER);
-    // Red-tint the headline.
-    textRow(3, "  FAILED", COL_ERR, COL_BG);
+    textRow(3, "  FAILED", COL_ERR, COL_BG);  // red-tint the headline
+  } else if (purpose_ == Purpose::PROFILE) {
+    showMessage("Done", "Card will be re-detected", State::HOME);
+    textRow(3, "  Done", COL_OK, COL_BG);
   } else {
     showMessage("Done", "Press HOME to return to the game", State::BROWSER);
     textRow(3, "  Done", COL_OK, COL_BG);
   }
+}
+
+// A file was chosen in the browser: validate (profiles) and ask.
+void UiMenu::selectFile(const Entry& e) {
+  if (strcmp(path_, "/") == 0) {
+    snprintf(selectedPath_, sizeof(selectedPath_), "/%s", e.name);
+  } else {
+    snprintf(selectedPath_, sizeof(selectedPath_), "%s/%s", path_, e.name);
+  }
+  if (purpose_ == Purpose::PROFILE) {
+    profileId_[0] = profileName_[0] = '\0';
+    const char* err = hooks_.validateProfile
+                          ? hooks_.validateProfile(selectedPath_, profileId_, sizeof(profileId_),
+                                                   profileName_, sizeof(profileName_), hooks_.user)
+                          : "no validator";
+    if (err) {
+      showMessage("Invalid profile", err, State::BROWSER);
+      return;
+    }
+  }
+  state_ = State::CONFIRM;
+  drawConfirm();
+}
+
+void UiMenu::openBrowser(Purpose purpose, const char* startDir) {
+  purpose_ = purpose;
+  if (!mountCard()) {
+    showMessage("No TF card", "Insert a TF card and retry", State::HOME);
+    return;
+  }
+  state_ = State::BROWSER;
+  if (!startDir || !loadDir(startDir)) {
+    if (!loadDir("/")) {
+      showMessage("Cannot read TF card", nullptr, State::HOME);
+      return;
+    }
+  }
+  drawBrowser();
 }
 
 //-----------------------------------------------------------------------------
@@ -331,20 +386,14 @@ void UiMenu::onKeysPressed(uint16_t edge) {
       } else if (edge & HKEY_A) {
         if (homeCursor_ == 0) {
           close();  // Launch
-        } else {
-          if (!mountCard()) {
-            showMessage("No TF card", "Insert a TF card and retry",
-                        State::HOME);
+        } else if (homeCursor_ == 1) {
+          if (hooks_.cardState(hooks_.user) != CardState::READY) {
+            showMessage("No Logic Card", "Apps needs a running card", State::HOME);
             break;
           }
-          state_ = State::BROWSER;
-          if (!loadDir(APPS_DIR)) {
-            if (!loadDir("/")) {
-              showMessage("Cannot read TF card", nullptr, State::HOME);
-              break;
-            }
-          }
-          drawBrowser();
+          openBrowser(Purpose::APP, hooks_.appsDir ? hooks_.appsDir(hooks_.user) : nullptr);
+        } else {
+          openBrowser(Purpose::PROFILE, CARDS_DIR);
         }
       }
       break;
@@ -370,14 +419,7 @@ void UiMenu::onKeysPressed(uint16_t edge) {
           if (e.isDir) {
             enterChild(e);
           } else {
-            if (strcmp(path_, "/") == 0) {
-              snprintf(selectedPath_, sizeof(selectedPath_), "/%s", e.name);
-            } else {
-              snprintf(selectedPath_, sizeof(selectedPath_), "%s/%s", path_,
-                       e.name);
-            }
-            state_ = State::CONFIRM;
-            drawConfirm();
+            selectFile(e);
           }
         }
       }
@@ -385,7 +427,7 @@ void UiMenu::onKeysPressed(uint16_t edge) {
 
     case State::CONFIRM:
       if (edge & HKEY_A) {
-        startProgram();
+        startJob();
       } else if (edge & HKEY_B) {
         state_ = State::BROWSER;
         drawBrowser();

@@ -374,7 +374,7 @@ $('#file-hex').addEventListener('change', ev => readFile(ev.target, text => {
 $('#btn-export-hex').addEventListener('click', () => {
   try {
     const { bytes } = build(profile);
-    download(`${baseName()}.hex`, toHex(bytes), 'text/plain');
+    download('profile.hex', toHex(bytes), 'text/plain');
   } catch (e) {
     showError(`Export HEX failed: ${e.message}`);
   }

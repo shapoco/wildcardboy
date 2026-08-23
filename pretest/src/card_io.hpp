@@ -1,32 +1,36 @@
 #pragma once
 
-// WildCardBus signals used by the TJP card: open-drain key outputs
-// (LCIO5..9) and the ATtiny85 RESET line (LCIO13).
-//
-// "Open-drain" is emulated with the pad direction: output-low = asserted,
-// input (Hi-Z) = released. Pulls are disabled because the card's key lines
-// are resistor dividers read by the ATtiny85 ADC.
+// WildCardBus line control driven by the card profile: key lines, RESET
+// and the ISP pin lookup. Each LCIO is configured from its PortCfg (mode
+// bits) — open-drain lines are emulated with the pad direction (output
+// low = asserted, input = released), push-pull lines switch the level.
 
 #include <cstdint>
 
+#include "card_profile.hpp"
+#include "isp_tiny85.hpp"
+
 namespace wcb {
 
-// Configure the pins (all released / Hi-Z). Idempotent.
-void cardIoInit();
+// Configure the GPIOs for every port in the profile (LCD I/F pins are left
+// to the I2C slave setup). All asserted lines start released.
+void cardIoConfigure(const CardProfile& p);
 
-// Drive the card key lines from a host key bitmask (HKEY_* bits, 1 = pressed).
-// Only L/R/U/D/A are forwarded; the rest is ignored.
+// Put every LCIO touched by the profile back to Hi-Z (card stopped).
+void cardIoRelease();
+
+// Drive the card key lines from a host key bitmask (HKEY_* bits, 1 =
+// pressed) through the profile key map. Only changed lines are touched.
 void cardKeysSet(uint16_t hostKeys);
-
-// Release all key lines.
 void cardKeysRelease();
 
-// RESET line control (open-drain: assert = drive low, release = Hi-Z).
+// RESET line (function 32). No-ops (with a log) when the profile has none.
+bool cardHasReset();
 void cardResetAssert();
 void cardResetRelease();
-
-// Pulse RESET low. Keys are released first so the ATtiny85 sees idle inputs
-// when it comes out of reset.
 void cardResetPulse(uint32_t lowMs = 10);
+
+// SPI ISP pins from the profile's isp table; false if not available.
+bool cardIspPins(IspPins* out);
 
 }  // namespace wcb

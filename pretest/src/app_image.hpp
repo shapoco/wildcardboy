@@ -22,6 +22,10 @@ enum class LoadResult : uint8_t {
 LoadResult appImageLoad(const char* path, uint8_t* img, uint32_t cap,
                         uint32_t* len);
 
+// Intel HEX file -> image (0xFF filled). *len = last used byte + 1.
+LoadResult ihexLoad(const char* path, uint8_t* img, uint32_t cap,
+                    uint32_t* len);
+
 const char* loadResultName(LoadResult r);
 
 }  // namespace wcb

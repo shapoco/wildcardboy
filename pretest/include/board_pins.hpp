@@ -67,32 +67,16 @@ static constexpr uint16_t HKEY_BR = 1u << 11;
 static constexpr uint16_t HKEY_HOME = 1u << 12;
 
 //-----------------------------------------------------------------------------
-// WildCardBus, TJP card assignment
+// WildCardBus
 //-----------------------------------------------------------------------------
-// LCIOn = GPIOn for n = 0..13.
-static constexpr uint PIN_LC_LCD_SDA = 2;  // LCIO2  -> ATtiny85 PB0
-static constexpr uint PIN_LC_LCD_SCL = 3;  // LCIO3  -> ATtiny85 PB2
-static constexpr uint PIN_LC_KEY_L = 5;    // LCIO5  (open-drain, active-low)
-static constexpr uint PIN_LC_KEY_R = 6;    // LCIO6
-static constexpr uint PIN_LC_KEY_U = 7;    // LCIO7
-static constexpr uint PIN_LC_KEY_D = 8;    // LCIO8
-static constexpr uint PIN_LC_KEY_A = 9;    // LCIO9
-static constexpr uint PIN_LC_RESET = 13;   // LCIO13 -> ATtiny85 RESET (o.d.)
-
-// ATtiny85 ISP lines (shared with the SSD1306 I2C pair and the A key).
-static constexpr uint PIN_LC_ISP_MOSI = 2;  // LCIO2 -> PB0
-static constexpr uint PIN_LC_ISP_SCK = 3;   // LCIO3 -> PB2
-static constexpr uint PIN_LC_ISP_MISO = 9;  // LCIO9 -> PB1
-
-// SSD1306 I2C slave address the ATtiny85 talks to.
-static constexpr uint8_t ADDR_LC_LCD = 0x3C;
+// LCIOn = GPIOn for n = 0..13. Which LCIO does what comes from the card
+// profile (card_profile.hpp); only the LCD I2C pair is fixed by the spec.
+static constexpr uint PIN_LCIO_BASE = 0;
+static constexpr uint PIN_LC_LCD_SDA = 2;  // LCIO2 (I2C1 SDA)
+static constexpr uint PIN_LC_LCD_SCL = 3;  // LCIO3 (I2C1 SCL)
 
 // TF card layout (see spec/05_tf_card.md).
-static constexpr const char* CARD_ID = "TJP";
-static constexpr const char* APPS_DIR = "/WCB/Cards/TJP/Apps";
+static constexpr const char* CARDS_DIR = "/WCB/Cards";
 static constexpr uint32_t TINY85_FLASH_SIZE = 8192;
-
-// Card key bits (subset of the host bits, same positions).
-static constexpr uint16_t CKEY_MASK = HKEY_L | HKEY_R | HKEY_U | HKEY_D | HKEY_A;
 
 }  // namespace wcb

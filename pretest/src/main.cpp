@@ -1,19 +1,21 @@
-// WildCardBoy pretest firmware: TJP (Tinyjoypad) logic card bring-up.
+// WildCardBoy pretest firmware: logic card bring-up (TJP card).
 //
-//   1. Detect the card by probing its ID EEPROM over LCAUX I2C
-//      (3 consecutive ACKs, 200 ms apart, debounce the hot-plug).
-//   2. Set up the WildCardBus for the TJP card and an LcdTap instance
-//      (SSD1306 / I2C slave @0x3C on LCIO2/3).
-//   3. Reset the ATtiny85 via LCIO13.
+//   1. Detect the card: its profile EEPROM must ACK 3 times (200 ms apart),
+//      then the profile is read and validated (length / CRC32 / CBOR).
+//   2. Configure the WildCardBus from the profile (key lines, RESET, LcdTap
+//      preset + overrides, ISP pins, key map) and start LcdTap as an I2C
+//      slave on LCIO2/3.
+//   3. Reset the card MCU.
 //   4. Loop: host keypad -> card key lines, LcdTap framebuffer -> host LCD.
-//   HOME opens the system menu (Launch / Apps). Apps browses the TF card
-//   (FatFs over SPI0) and programs the selected .bin/.hex into the ATtiny85
-//   over ISP (LCIO2/3/9/13) while the I2C1 slave is suspended.
+//   HOME opens the system menu: Launch / Apps (program the card MCU from
+//   the TF card) / Profile (write a profile .hex into the card EEPROM and
+//   re-detect the card).
 //
 // Debug output: USB CDC. See ../spec/ for the pin map.
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 
 #include "hardware/i2c.h"
 #include "pico/stdlib.h"
@@ -24,7 +26,9 @@
 #include "app_image.hpp"
 #include "aux_i2c.hpp"
 #include "board_pins.hpp"
+#include "card_eeprom.hpp"
 #include "card_io.hpp"
+#include "card_profile.hpp"
 #include "ili9488.hpp"
 #include "isp_tiny85.hpp"
 #include "lcd_pump.hpp"
@@ -41,6 +45,7 @@ static constexpr uint32_t CARD_PROBE_INTERVAL_MS = 200;
 // The card counts as present only after this many consecutive EEPROM ACKs
 // (debounces the hot-plug contact chatter).
 static constexpr uint32_t CARD_PROBE_SUCCESS_COUNT = 3;
+static constexpr uint32_t CARD_INVALID_POLL_MS = 500;
 static constexpr uint32_t KEY_POLL_INTERVAL_MS = 5;
 static constexpr uint32_t STATS_INTERVAL_MS = 1000;
 static constexpr uint32_t PUMP_MAX_LINES_PER_CALL = 48;
@@ -57,7 +62,17 @@ static lcdtap::LcdTap* gTap = nullptr;
 static lcdtap::pico2::I2cSlaveState gI2c;
 static lcdtap::pico2::I2cSlaveConfig gI2cCfg;
 static uint32_t gI2cRingBuf[I2C_RING_WORDS];
-static bool gCardPresent = false;
+
+static CardState gCardState = CardState::NONE;
+static CardProfile gProfile;                    // profile of the running card
+static ProfileError gProfileError = ProfileError::EMPTY;
+static char gAppsDir[64];
+static uint8_t gFrameBuf[PROFILE_FRAME_MAX];    // EEPROM read / verify buffer
+
+static uint8_t gStageBuf[PROFILE_FRAME_MAX];    // profile staged for writing
+static uint32_t gStageLen = 0;
+static CardProfile gStageProfile;
+
 static uint8_t gAppImage[TINY85_FLASH_SIZE];
 
 static inline uint32_t nowMs() { return to_ms_since_boot(get_absolute_time()); }
@@ -65,7 +80,7 @@ static inline uint32_t nowMs() { return to_ms_since_boot(get_absolute_time()); }
 static void lcdtapLog(void*, const char* msg) { printf("[lcdtap] %s\n", msg); }
 
 //-----------------------------------------------------------------------------
-// Card bus (I2C1 slave for the SSD1306 stream)
+// Card bus (I2C1 slave for the LCD stream)
 //-----------------------------------------------------------------------------
 
 static void cardBusAttach() {
@@ -80,17 +95,17 @@ static void cardBusDetach() {
 }
 
 //-----------------------------------------------------------------------------
-// Card bring-up
+// Card start / stop
 //-----------------------------------------------------------------------------
-static void startTjpCard() {
-  // WildCardBus: key lines / reset released.
-  cardIoInit();
 
-  // LcdTap: Tinyjoypad preset (SSD1306, I2C, 128x64), output raster equal
-  // to the host LCD so one fillScanline() call is one LCD line.
+static void cardStart(const CardProfile& p) {
+  cardIoConfigure(p);
+  snprintf(gAppsDir, sizeof(gAppsDir), "%s/%s/Apps", CARDS_DIR, p.id);
+
+  // LcdTap: preset + profile overrides; output raster = host LCD so one
+  // fillScanline() call is one LCD line.
   lcdtap::LcdTapConfig cfg;
-  lcdtap::getPresetConfig(lcdtap::ConfigPreset::TINYJOYPAD, &cfg);
-  cfg.i2cSlaveAddr = ADDR_LC_LCD;
+  profileBuildLcdTapConfig(p, &cfg);
   cfg.dviWidth = LCD_WIDTH;
   cfg.dviHeight = LCD_HEIGHT;
   cfg.scaleMode = lcdtap::ScaleMode::FIT;
@@ -118,25 +133,65 @@ static void startTjpCard() {
 
   gPump.init(gTap, &gLcd);
 
-  // Reset the ATtiny85; mirror it into LcdTap so its controller state
-  // matches the fresh SSD1306 init sequence that follows.
-  printf("resetting ATtiny85...\n");
+  printf("card started: id=%s name=\"%s\" preset=%s ctrl=%s bus=%s addr=0x%02x %ux%u\n",
+         p.id, p.name, p.lcdtapPreset,
+         lcdtap::CONTROLLER_NAMES[static_cast<int>(cfg.controllerFamily)],
+         lcdtap::BUS_NAMES[static_cast<int>(cfg.busInterface)], cfg.i2cSlaveAddr,
+         cfg.buffWidth, cfg.buffHeight);
+
+  // Reset the card MCU; mirror it into LcdTap so its controller state
+  // matches the init sequence that follows.
   gTap->inputReset(true);
   cardResetPulse(10);
   gTap->inputReset(false);
-  printf("TJP card running\n");
+  gCardState = CardState::READY;
+}
+
+static void cardStop() {
+  if (gTap) {
+    cardBusDetach();
+    delete gTap;
+    gTap = nullptr;
+  }
+  cardIoRelease();
+  gAppsDir[0] = '\0';
+  gCardState = CardState::NONE;
 }
 
 //-----------------------------------------------------------------------------
-// App programming (called from the UI, blocking)
+// Idle screens (outside the menu)
+//-----------------------------------------------------------------------------
+
+static void drawIdleScreen() {
+  gLcd.clear(COLOR_BLACK);
+  drawTextCentered(gLcd, 120, "WildCardBoy pretest", COLOR_WHITE, COLOR_BLACK, 3);
+  if (gCardState == CardState::INVALID) {
+    char line[48];
+    snprintf(line, sizeof(line), "Profile: %s", profileErrorText(gProfileError));
+    drawTextCentered(gLcd, 200, line, COLOR_RED, COLOR_BLACK, 2);
+    drawTextCentered(gLcd, 240, "HOME > Profile to write one", COLOR_GRAY, COLOR_BLACK, 1);
+  } else {
+    drawTextCentered(gLcd, 200, "No Logic Card", COLOR_YELLOW, COLOR_BLACK, 2);
+  }
+  drawTextCentered(gLcd, 300, "HOME: system menu", COLOR_GRAY, COLOR_BLACK, 1);
+}
+
+//-----------------------------------------------------------------------------
+// UI hooks
 //-----------------------------------------------------------------------------
 
 static void ispProgressWrite(int pct, void*) { gUi.progress("Write", pct); }
 static void ispProgressVerify(int pct, void*) { gUi.progress("Verify", pct); }
+static void eepromProgressWrite(int pct, void*) { gUi.progress("Write", pct); }
 
-static bool hookCardPresent(void*) { return gCardPresent; }
+static CardState hookCardState(void*) { return gCardState; }
+static const char* hookAppsDir(void*) { return gAppsDir[0] ? gAppsDir : nullptr; }
 
 static const char* hookProgramApp(const char* path, void*) {
+  if (gCardState != CardState::READY) return "No Logic Card";
+  IspPins pins;
+  if (!cardIspPins(&pins)) return "ISP not available";
+
   printf("[prog] loading %s\n", path);
   gUi.progress("Load", 0);
   uint32_t len = 0;
@@ -156,14 +211,13 @@ static const char* hookProgramApp(const char* path, void*) {
   const char* err = nullptr;
   uint64_t t0 = time_us_64();
   do {
-    if (!ispBegin()) {
+    if (!ispBegin(pins)) {
       err = "ISP enable failed";
       break;
     }
     IspDeviceInfo dev;
     ispReadDevice(&dev);
-    printf("[prog] signature %02x %02x %02x  fuses L=%02x H=%02x E=%02x "
-           "lock=%02x\n",
+    printf("[prog] signature %02x %02x %02x  fuses L=%02x H=%02x E=%02x lock=%02x\n",
            dev.signature[0], dev.signature[1], dev.signature[2], dev.fuseLow,
            dev.fuseHigh, dev.fuseExt, dev.lock);
     if (!ispIsTiny85(dev)) {
@@ -184,8 +238,7 @@ static const char* hookProgramApp(const char* path, void*) {
     gUi.progress("Verify", 0);
     uint32_t bad = 0;
     if (!ispVerifyFlash(gAppImage, len, &bad, ispProgressVerify, nullptr)) {
-      printf("[prog] verify mismatch at 0x%04lx\n",
-             static_cast<unsigned long>(bad));
+      printf("[prog] verify mismatch at 0x%04lx\n", static_cast<unsigned long>(bad));
       err = "Verify failed";
       break;
     }
@@ -195,7 +248,7 @@ static const char* hookProgramApp(const char* path, void*) {
   // Back to game mode: data pins Hi-Z, RESET released (new program starts),
   // key lines re-armed, I2C1 slave listening again.
   ispEnd();
-  cardIoInit();
+  cardIoConfigure(gProfile);
   cardBusAttach();
   gTap->inputReset(false);
 
@@ -204,25 +257,67 @@ static const char* hookProgramApp(const char* path, void*) {
   return err;
 }
 
-//-----------------------------------------------------------------------------
-// Screens outside the menu
-//-----------------------------------------------------------------------------
+static const char* hookValidateProfile(const char* path, char* id, size_t idCap,
+                                       char* name, size_t nameCap, void*) {
+  printf("[profile] loading %s\n", path);
+  gStageLen = 0;
+  uint32_t imgLen = 0;
+  LoadResult lr = ihexLoad(path, gStageBuf, sizeof(gStageBuf), &imgLen);
+  if (lr == LoadResult::TOO_LARGE) return "Profile too large";
+  if (lr != LoadResult::OK) return loadResultName(lr);
 
-static void drawNoCardScreen() {
-  gLcd.clear(COLOR_BLACK);
-  drawTextCentered(gLcd, 120, "WildCardBoy pretest", COLOR_WHITE, COLOR_BLACK,
-                   3);
-  drawTextCentered(gLcd, 200, "No Logic Card", COLOR_YELLOW, COLOR_BLACK, 2);
-  drawTextCentered(gLcd, 300, "HOME: system menu", COLOR_GRAY, COLOR_BLACK,
-                   1);
+  uint32_t cborLen = 0;
+  ProfileError pe = profileParseFrame(gStageBuf, imgLen, &gStageProfile, &cborLen);
+  if (pe != ProfileError::OK) {
+    printf("[profile] invalid: %s\n", profileErrorText(pe));
+    return profileErrorText(pe);
+  }
+  gStageLen = 4 + cborLen + 4;
+  snprintf(id, idCap, "%s", gStageProfile.id);
+  snprintf(name, nameCap, "%s", gStageProfile.name);
+  printf("[profile] valid: id=%s name=\"%s\" cbor=%lu bytes\n", gStageProfile.id,
+         gStageProfile.name, static_cast<unsigned long>(cborLen));
+  return nullptr;
+}
+
+static const char* hookWriteProfile(void*) {
+  if (gStageLen == 0) return "Nothing to write";
+  if (!cardEepromProbe()) return "Card EEPROM not responding";
+
+  gUi.progress("Write", 0);
+  uint64_t t0 = time_us_64();
+  if (!eepromWrite(0, gStageBuf, gStageLen, eepromProgressWrite, nullptr)) {
+    return "EEPROM write failed";
+  }
+  gUi.progress("Verify", 0);
+  uint32_t readLen = 0, cborLen = 0;
+  CardProfile check;
+  ProfileError pe = eepromReadProfile(gFrameBuf, &readLen, &check, &cborLen);
+  if (pe != ProfileError::OK) {
+    printf("[profile] read-back failed: %s\n", profileErrorText(pe));
+    return "Verify failed";
+  }
+  if (readLen != gStageLen || memcmp(gFrameBuf, gStageBuf, gStageLen) != 0) {
+    printf("[profile] read-back differs\n");
+    return "Verify mismatch";
+  }
+  gUi.progress("Verify", 100);
+  printf("[profile] written %lu bytes (%llu ms); restarting card detection\n",
+         static_cast<unsigned long>(gStageLen),
+         static_cast<unsigned long long>((time_us_64() - t0) / 1000));
+
+  // Tear the running card down; the main loop re-detects it from scratch.
+  cardStop();
+  return nullptr;
 }
 
 //-----------------------------------------------------------------------------
 // Statistics
 //-----------------------------------------------------------------------------
 static void printStats(uint16_t keys, bool keysOk, uint32_t loopsPerSec) {
-  printf("[stat] keys=0x%04x%s loops=%lu", keys, keysOk ? "" : "(err)",
-         static_cast<unsigned long>(loopsPerSec));
+  printf("[stat] card=%s keys=0x%04x%s loops=%lu",
+         gCardState == CardState::READY ? "ready" : gCardState == CardState::INVALID ? "invalid" : "none",
+         keys, keysOk ? "" : "(err)", static_cast<unsigned long>(loopsPerSec));
   if (gTap) {
     printf(" rxCmd=%lu rxData=%lu unk=%lu(0x%02x) hwrst=%lu drop=%lu ovf=%lu "
            "backlog=%lu | lines=%lu full=%lu groups=%lu",
@@ -246,7 +341,7 @@ static void printStats(uint16_t keys, bool keysOk, uint32_t loopsPerSec) {
 //-----------------------------------------------------------------------------
 int main() {
   stdio_init_all();
-  printf("\n=== WildCardBoy pretest (TJP card) ===\n");
+  printf("\n=== WildCardBoy pretest ===\n");
 
   // TF card mux to the host, SPI0 parked (the card itself is probed when
   // the browser opens).
@@ -270,8 +365,7 @@ int main() {
            LCD_WIDTH * (LCD_HEIGHT - 100),
            static_cast<unsigned long long>(t1 - t0));
   }
-  drawTextCentered(gLcd, 120, "WildCardBoy pretest", COLOR_WHITE, COLOR_BLACK,
-                   3);
+  drawTextCentered(gLcd, 120, "WildCardBoy pretest", COLOR_WHITE, COLOR_BLACK, 3);
   drawTextCentered(gLcd, 300, "note: on-board USER button = LCD D7",
                    COLOR_GRAY, COLOR_BLACK, 1);
 
@@ -280,12 +374,15 @@ int main() {
 
   // System menu.
   UiHooks hooks;
-  hooks.cardPresent = hookCardPresent;
+  hooks.cardState = hookCardState;
+  hooks.appsDir = hookAppsDir;
   hooks.programApp = hookProgramApp;
+  hooks.validateProfile = hookValidateProfile;
+  hooks.writeProfile = hookWriteProfile;
   hooks.user = nullptr;
   gUi.init(&gLcd, hooks);
 
-  bool noCardShown = false;
+  bool idleShown = false;
   uint32_t probeOkCount = 0;
   uint32_t lastProbeMs = 0;
   uint32_t lastKeyPollMs = 0;
@@ -298,12 +395,13 @@ int main() {
   while (true) {
     const uint32_t now = nowMs();
     const bool menuWasVisible = gUi.isVisible();
+    const CardState stateAtTop = gCardState;
 
     //--- card detection -------------------------------------------------
-    // Non-blocking: one probe per interval; the card counts as present
-    // only after CARD_PROBE_SUCCESS_COUNT consecutive ACKs so hot-plug
-    // contact chatter cannot trigger a premature bring-up.
-    if (!gCardPresent) {
+    if (gCardState == CardState::NONE) {
+      // One probe per interval; the card counts as present only after
+      // CARD_PROBE_SUCCESS_COUNT consecutive ACKs, then its profile must
+      // validate.
       if (now - lastProbeMs >= CARD_PROBE_INTERVAL_MS || lastProbeMs == 0) {
         lastProbeMs = now;
         if (cardEepromProbe()) {
@@ -312,26 +410,49 @@ int main() {
                  static_cast<unsigned long>(probeOkCount),
                  static_cast<unsigned long>(CARD_PROBE_SUCCESS_COUNT));
           if (probeOkCount >= CARD_PROBE_SUCCESS_COUNT) {
-            printf("TJP card detected\n");
-            gCardPresent = true;
-            if (gUi.isVisible()) gUi.close();  // pump takes the screen
-            startTjpCard();
+            probeOkCount = 0;
+            uint32_t frameLen = 0, cborLen = 0;
+            gProfileError = eepromReadProfile(gFrameBuf, &frameLen, &gProfile, &cborLen);
+            if (gProfileError == ProfileError::OK) {
+              printf("card profile OK: id=%s name=\"%s\" preset=%s cbor=%lu bytes\n",
+                     gProfile.id, gProfile.name, gProfile.lcdtapPreset,
+                     static_cast<unsigned long>(cborLen));
+              if (gUi.isVisible()) gUi.close();  // the pump takes the screen
+              cardStart(gProfile);
+            } else {
+              printf("card profile invalid: %s (len field %lu)\n",
+                     profileErrorText(gProfileError), static_cast<unsigned long>(cborLen));
+              gCardState = CardState::INVALID;
+              idleShown = false;
+            }
           }
         } else {
           if (probeOkCount > 0) {
-            printf("card EEPROM (0x%02x) NAK; ACK streak reset\n",
-                   ADDR_CARD_EEPROM);
+            printf("card EEPROM (0x%02x) NAK; ACK streak reset\n", ADDR_CARD_EEPROM);
           }
           probeOkCount = 0;
-          if (!noCardShown) {
+          if (!idleShown) {
             printf("no card (EEPROM 0x%02x NAK); retrying every %lu ms\n",
-                   ADDR_CARD_EEPROM,
-                   static_cast<unsigned long>(CARD_PROBE_INTERVAL_MS));
-            if (!gUi.isVisible()) drawNoCardScreen();
-            noCardShown = true;
+                   ADDR_CARD_EEPROM, static_cast<unsigned long>(CARD_PROBE_INTERVAL_MS));
           }
         }
       }
+    } else if (gCardState == CardState::INVALID) {
+      // Card present but unusable: wait for it to be pulled (NAK) or for a
+      // profile to be written (the writer resets the state itself).
+      if (now - lastProbeMs >= CARD_INVALID_POLL_MS) {
+        lastProbeMs = now;
+        if (!cardEepromProbe()) {
+          printf("card removed\n");
+          gCardState = CardState::NONE;
+          idleShown = false;
+        }
+      }
+    }
+
+    if (!idleShown && gCardState != CardState::READY && !gUi.isVisible()) {
+      drawIdleScreen();
+      idleShown = true;
     }
 
     //--- host keypad -----------------------------------------------------
@@ -348,27 +469,34 @@ int main() {
         if (gUi.isVisible()) {
           gUi.close();
         } else {
-          if (gCardPresent) cardKeysRelease();
+          if (gCardState == CardState::READY) cardKeysRelease();
           gUi.open();
         }
       } else if (gUi.isVisible()) {
-        gUi.onKeysPressed(edge);  // may close itself (Launch)
-      } else if (gCardPresent) {
+        gUi.onKeysPressed(edge);  // may close itself (Launch) or stop the card
+      } else if (gCardState == CardState::READY) {
         cardKeysSet(keys);
       }
     }
 
     //--- menu closed this iteration: hand the screen back -----------------
     if (menuWasVisible && !gUi.isVisible()) {
-      if (gCardPresent) {
+      if (gCardState == CardState::READY) {
         gPump.requestFullRepaint();
       } else {
-        drawNoCardScreen();
+        drawIdleScreen();
+        idleShown = true;
       }
+    }
+    // Card stopped while the menu was open (profile written): the idle
+    // screen is drawn when the menu closes.
+    if (stateAtTop == CardState::READY && gCardState != CardState::READY) {
+      idleShown = gUi.isVisible();
+      lastProbeMs = now;
     }
 
     //--- card LCD stream -> host LCD ---------------------------------------
-    if (gCardPresent) {
+    if (gCardState == CardState::READY) {
       lcdtap::pico2::i2cSlaveProcess(&gI2c);
       gTap->tick(now);
       if (!gUi.isVisible()) gPump.process(PUMP_MAX_LINES_PER_CALL);

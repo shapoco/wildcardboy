@@ -1,3 +1,6 @@
 [submodule "submodule/lcdtap"]
 	path = submodule/lcdtap
 	url = git@github.com:shapoco/lcdtap.git
+[submodule "submodule/QCBOR"]
+	path = submodule/QCBOR
+	url = https://github.com/laurencelundblade/QCBOR.git

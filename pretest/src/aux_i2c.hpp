@@ -13,6 +13,14 @@ namespace wcb {
 // Initialize I2C0 as a 400 kHz master; both pin pairs start Hi-Z.
 void auxI2cInit();
 
+// Route I2C0 to one of the buses (the other pair goes Hi-Z). The read/
+// probe helpers below select their bus themselves; external users of I2C0
+// (card_eeprom) call these explicitly.
+void auxSelectHaux();
+void auxSelectLcaux();
+// Force a controller re-init on the next selection (after a failed transfer).
+void auxInvalidate();
+
 // True if the card EEPROM (24LC256 @0x50, LCAUX) ACKs a 1-byte read.
 // Contents are irrelevant for the pretest; the ACK alone means "card
 // present".

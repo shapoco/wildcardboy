@@ -2,27 +2,38 @@
 
 // System menu + file browser drawn directly on the host LCD (text_draw).
 //
-//   HOME     : Launch / Apps
-//   BROWSER  : TF card browser starting at APPS_DIR
-//   CONFIRM  : "Write <file>?"  A = yes, B = no
-//   PROGRAM  : progress screen while the host programs the card MCU
+//   HOME     : Launch / Apps / Profile
+//   BROWSER  : TF card browser (purpose: app image or card profile)
+//   CONFIRM  : "Write <file>?" / "Overwrite card profile?"  A = yes, B = no
+//   PROGRAM  : progress screen while the host programs the MCU / EEPROM
 //   MESSAGE  : result / error text, A or B returns to the previous screen
 //
-// The menu never touches LcdTap, the ISP or the card bus itself; those are
-// reached through UiHooks so main.cpp stays the only place that sequences
-// hardware state.
+// The menu never touches LcdTap, the ISP, the EEPROM or the card bus
+// itself; those are reached through UiHooks so main.cpp stays the only
+// place that sequences hardware state.
 
+#include <cstddef>
 #include <cstdint>
 
 #include "ili9488.hpp"
 
 namespace wcb {
 
+enum class CardState : uint8_t { NONE, INVALID, READY };
+
 struct UiHooks {
-  bool (*cardPresent)(void* user);
+  CardState (*cardState)(void* user);
+  // Apps directory of the running card ("/WCB/Cards/<id>/Apps"), or nullptr.
+  const char* (*appsDir)(void* user);
   // Blocking. Must call UiMenu::progress() as it goes. Returns nullptr on
   // success or a short error message.
   const char* (*programApp)(const char* path, void* user);
+  // Load + validate a profile .hex; fills id/name for the confirmation.
+  // Returns nullptr when valid or a short error message.
+  const char* (*validateProfile)(const char* path, char* id, size_t idCap,
+                                 char* name, size_t nameCap, void* user);
+  // Write the profile validated last (blocking, calls progress()).
+  const char* (*writeProfile)(void* user);
   void* user;
 };
 
@@ -41,11 +52,12 @@ class UiMenu {
   // Feed pressed-edge bitmask (HKEY_*; HOME is handled by the caller).
   void onKeysPressed(uint16_t edge);
 
-  // Progress display during UiHooks::programApp.
+  // Progress display during UiHooks::programApp / writeProfile.
   void progress(const char* stage, int percent);
 
  private:
   enum class State : uint8_t { HIDDEN, HOME, BROWSER, CONFIRM, PROGRAM, MESSAGE };
+  enum class Purpose : uint8_t { APP, PROFILE };
 
   struct Entry {
     char name[NAME_LEN];
@@ -62,9 +74,11 @@ class UiMenu {
   // Browser helpers
   bool mountCard();
   bool loadDir(const char* path);
+  void openBrowser(Purpose purpose, const char* startDir);
   void enterChild(const Entry& e);
   void goParent();
-  void startProgram();
+  void selectFile(const Entry& e);
+  void startJob();
 
   // Drawing primitives (30 cols x 10 rows at scale 2)
   void clearScreen();
@@ -75,6 +89,7 @@ class UiMenu {
   UiHooks hooks_{};
   State state_ = State::HIDDEN;
   State messageBack_ = State::HOME;
+  Purpose purpose_ = Purpose::APP;
 
   int homeCursor_ = 0;
 
@@ -86,6 +101,8 @@ class UiMenu {
   bool mounted_ = false;
 
   char selectedPath_[PATH_LEN];
+  char profileId_[24];
+  char profileName_[72];
   char lastStage_[16];
   int lastPercent_ = -1;
 };

@@ -66,6 +66,10 @@ static void selectBus(AuxBus bus) {
 // Force a controller re-init on the next access (after a failed transfer).
 static void invalidateBus() { sCurrent = AuxBus::NONE; }
 
+void auxSelectHaux() { selectBus(AuxBus::HAUX); }
+void auxSelectLcaux() { selectBus(AuxBus::LCAUX); }
+void auxInvalidate() { invalidateBus(); }
+
 //-----------------------------------------------------------------------------
 // API
 //-----------------------------------------------------------------------------

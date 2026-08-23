@@ -21,6 +21,13 @@ add_subdirectory(${LCDTAP_DIR}/lib lcdtap_lib)
 # FatFs (read-only config), shared with firmware/.
 add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../firmware/lib/fatfs fatfs)
 
+# QCBOR (card profile decoding). Integer-only build.
+set(QCBOR_DISABLE_FLOAT_HW_USE ON CACHE BOOL "" FORCE)
+set(USEFULBUF_DISABLE_ALL_FLOAT ON CACHE BOOL "" FORCE)
+set(QCBOR_DISABLE_TAGS ON CACHE BOOL "" FORCE)
+set(QCBOR_DISABLE_INDEFINITE_LENGTH_STRINGS ON CACHE BOOL "" FORCE)
+add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../submodule/QCBOR qcbor)
+
 add_executable(pretest
     src/main.cpp
     src/ili9488.cpp
@@ -28,6 +35,9 @@ add_executable(pretest
     src/text_draw.cpp
     src/aux_i2c.cpp
     src/card_io.cpp
+    src/crc32.cpp
+    src/card_profile.cpp
+    src/card_eeprom.cpp
     src/sd_spi.cpp
     src/diskio.cpp
     src/isp_tiny85.cpp
@@ -49,6 +59,7 @@ target_link_libraries(pretest
     pico_stdlib
     lcdtap
     fatfs
+    qcbor
     hardware_pio
     hardware_spi
     hardware_dma

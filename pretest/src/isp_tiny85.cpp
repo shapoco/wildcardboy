@@ -18,6 +18,8 @@ static constexpr uint32_t TWD_FLASH_MS = 5;   // tWD_FLASH 4.5 ms
 static constexpr uint32_t TWD_ERASE_MS = 10;  // tWD_ERASE 9.0 ms
 static constexpr int PE_RETRIES = 5;
 
+static IspPins sPins = {0, 0, 0};
+
 //-----------------------------------------------------------------------------
 // Bit level
 //-----------------------------------------------------------------------------
@@ -25,12 +27,12 @@ static constexpr int PE_RETRIES = 5;
 static uint8_t xferByte(uint8_t out) {
   uint8_t in = 0;
   for (int b = 7; b >= 0; --b) {
-    gpio_put(PIN_LC_ISP_MOSI, (out >> b) & 1);
+    gpio_put(sPins.mosi, (out >> b) & 1);
     busy_wait_us(SCK_HALF_US);
-    gpio_put(PIN_LC_ISP_SCK, 1);
+    gpio_put(sPins.sck, 1);
     busy_wait_us(SCK_HALF_US);
-    in = static_cast<uint8_t>((in << 1) | (gpio_get(PIN_LC_ISP_MISO) ? 1 : 0));
-    gpio_put(PIN_LC_ISP_SCK, 0);
+    in = static_cast<uint8_t>((in << 1) | (gpio_get(sPins.miso) ? 1 : 0));
+    gpio_put(sPins.sck, 0);
   }
   return in;
 }
@@ -62,30 +64,31 @@ static bool pollReady(uint32_t timeoutMs) {
 //-----------------------------------------------------------------------------
 
 static void pinsProgramming() {
-  gpio_init(PIN_LC_ISP_SCK);
-  gpio_disable_pulls(PIN_LC_ISP_SCK);
-  gpio_put(PIN_LC_ISP_SCK, 0);
-  gpio_set_dir(PIN_LC_ISP_SCK, GPIO_OUT);
+  gpio_init(sPins.sck);
+  gpio_disable_pulls(sPins.sck);
+  gpio_put(sPins.sck, 0);
+  gpio_set_dir(sPins.sck, GPIO_OUT);
 
-  gpio_init(PIN_LC_ISP_MOSI);
-  gpio_disable_pulls(PIN_LC_ISP_MOSI);
-  gpio_put(PIN_LC_ISP_MOSI, 0);
-  gpio_set_dir(PIN_LC_ISP_MOSI, GPIO_OUT);
+  gpio_init(sPins.mosi);
+  gpio_disable_pulls(sPins.mosi);
+  gpio_put(sPins.mosi, 0);
+  gpio_set_dir(sPins.mosi, GPIO_OUT);
 
-  gpio_init(PIN_LC_ISP_MISO);
-  gpio_disable_pulls(PIN_LC_ISP_MISO);
-  gpio_set_dir(PIN_LC_ISP_MISO, GPIO_IN);
+  gpio_init(sPins.miso);
+  gpio_disable_pulls(sPins.miso);
+  gpio_set_dir(sPins.miso, GPIO_IN);
 }
 
 static void pinsRelease() {
-  for (uint pin : {PIN_LC_ISP_SCK, PIN_LC_ISP_MOSI, PIN_LC_ISP_MISO}) {
+  for (uint pin : {sPins.sck, sPins.mosi, sPins.miso}) {
     gpio_init(pin);
     gpio_disable_pulls(pin);
     gpio_set_dir(pin, GPIO_IN);
   }
 }
 
-bool ispBegin() {
+bool ispBegin(const IspPins& pins) {
+  sPins = pins;
   cardKeysRelease();
   pinsProgramming();
 

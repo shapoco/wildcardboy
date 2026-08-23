@@ -1,7 +1,7 @@
 #pragma once
 
-// ATtiny85 in-system (serial) programmer, bit-banged on the WildCardBus:
-// LCIO2 = MOSI, LCIO3 = SCK, LCIO9 = MISO, LCIO13 = RESET (via card_io).
+// ATtiny85 in-system (serial) programmer, bit-banged on the WildCardBus
+// (MOSI/SCK/MISO per card profile, RESET via card_io).
 //
 // Caller protocol: release all other card lines and stop the I2C1 slave
 // (the MOSI/SCK pins are its SDA/SCL), then ispBegin() .. ispEnd(). After
@@ -14,6 +14,12 @@ namespace wcb {
 
 using IspProgressFn = void (*)(int percent, void* user);
 
+struct IspPins {
+  uint32_t mosi;
+  uint32_t sck;
+  uint32_t miso;
+};
+
 struct IspDeviceInfo {
   uint8_t signature[3];
   uint8_t fuseLow, fuseHigh, fuseExt, lock;
@@ -22,8 +28,10 @@ struct IspDeviceInfo {
 static constexpr uint8_t TINY85_SIGNATURE[3] = {0x1E, 0x93, 0x0B};
 static constexpr uint32_t TINY85_PAGE_BYTES = 64;  // 32 words
 
-// Hold RESET low and enter serial programming mode (with retries).
-bool ispBegin();
+// Hold RESET low and enter serial programming mode (with retries). The
+// data pins come from the card profile (see cardIspPins()); RESET is driven
+// through card_io.
+bool ispBegin(const IspPins& pins);
 
 // Leave programming mode: data pins Hi-Z, RESET released.
 void ispEnd();

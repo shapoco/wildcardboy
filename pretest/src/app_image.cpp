@@ -107,20 +107,19 @@ struct HexParser {
 
 //-----------------------------------------------------------------------------
 
-LoadResult appImageLoad(const char* path, uint8_t* img, uint32_t cap,
-                        uint32_t* len) {
+static uint8_t chunk[512];
+
+LoadResult ihexLoad(const char* path, uint8_t* img, uint32_t cap,
+                    uint32_t* len) {
   memset(img, 0xFF, cap);
   *len = 0;
-
   FIL f;
   FRESULT fr = f_open(&f, path, FA_READ);
   if (fr == FR_NO_FILE || fr == FR_NO_PATH) return LoadResult::NOT_FOUND;
   if (fr != FR_OK) return LoadResult::IO_ERROR;
 
   LoadResult result = LoadResult::OK;
-  static uint8_t chunk[512];
-
-  if (hasHexExt(path)) {
+  {
     static HexParser hp;
     hp = HexParser{};
     hp.img = img;
@@ -144,7 +143,24 @@ LoadResult appImageLoad(const char* path, uint8_t* img, uint32_t cap,
       if (hp.maxEnd == 0) result = LoadResult::EMPTY;
       *len = hp.maxEnd;
     }
-  } else {
+  }
+  f_close(&f);
+  return result;
+}
+
+LoadResult appImageLoad(const char* path, uint8_t* img, uint32_t cap,
+                        uint32_t* len) {
+  if (hasHexExt(path)) return ihexLoad(path, img, cap, len);
+
+  memset(img, 0xFF, cap);
+  *len = 0;
+  FIL f;
+  FRESULT fr = f_open(&f, path, FA_READ);
+  if (fr == FR_NO_FILE || fr == FR_NO_PATH) return LoadResult::NOT_FOUND;
+  if (fr != FR_OK) return LoadResult::IO_ERROR;
+
+  LoadResult result = LoadResult::OK;
+  {
     FSIZE_t size = f_size(&f);
     if (size > cap) {
       result = LoadResult::TOO_LARGE;
