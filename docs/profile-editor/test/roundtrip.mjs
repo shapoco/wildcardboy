@@ -1,0 +1,47 @@
+// node docs/profile-editor/test/roundtrip.mjs
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+import assert from 'node:assert/strict';
+
+import { crc32 } from '../js/crc32.js';
+import { encode, decode } from '../js/cbor.js';
+import { toHex, fromHex } from '../js/ihex.js';
+import { build, parse } from '../js/eeprom_image.js';
+import { normalize, validate, DEFAULT_PROFILE } from '../js/profile.js';
+
+const here = dirname(fileURLToPath(import.meta.url));
+
+// CRC-32 check value ("123456789" -> 0xCBF43926)
+assert.equal(crc32(new TextEncoder().encode('123456789')), 0xCBF43926);
+
+// CBOR basics
+assert.deepEqual([...encode(0)], [0x00]);
+assert.deepEqual([...encode(-1)], [0x20]);
+assert.deepEqual([...encode(1000)], [0x19, 0x03, 0xE8]);
+assert.deepEqual([...encode('a')], [0x61, 0x61]);
+assert.deepEqual([...encode({ a: [1, 2] })], [0xA1, 0x61, 0x61, 0x82, 0x01, 0x02]);
+assert.throws(() => encode({ x: 1.5 }));
+assert.throws(() => encode({ x: true }));
+assert.deepEqual(decode(new Uint8Array([0x9F, 0x01, 0x02, 0xFF])).value, [1, 2]); // indefinite array
+
+// Profile round trip: cards/TJP/profile.json -> CBOR -> frame -> HEX -> back
+const src = JSON.parse(readFileSync(join(here, '../../../cards/TJP/profile.json'), 'utf8'));
+const prof = normalize(src);
+assert.deepEqual(validate(prof).filter(m => m.level === 'error'), []);
+const { bytes, cbor, crc } = build(prof);
+const hex = toHex(bytes);
+assert.ok(hex.startsWith(':10000000'));
+assert.equal(((bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3]) >>> 0, cbor.length);
+const back = fromHex(hex);
+assert.deepEqual([...back], [...bytes]);
+const parsed = parse(back);
+assert.equal(parsed.crc, crc);
+assert.deepEqual(normalize(parsed.profile), prof);
+assert.deepEqual(normalize(DEFAULT_PROFILE), prof, 'built-in default must equal cards/TJP/profile.json');
+
+// Corruption is detected
+const bad = bytes.slice(); bad[10] ^= 0x01;
+assert.throws(() => parse(bad), /CRC mismatch/);
+
+console.log(`ok: CBOR ${cbor.length} bytes, image ${bytes.length} bytes, CRC 0x${crc.toString(16)}`);

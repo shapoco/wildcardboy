@@ -142,7 +142,7 @@ uint32_t LcdPump::process(uint32_t maxLines) {
 
   if (mi.rotation & 1u) {
     // Columns map to output lines in the transposed orientations; not needed
-    // for the TinyJoypad preset, so fall back to a full repaint if anything
+    // for the Tinyjoypad preset, so fall back to a full repaint if anything
     // is dirty.
     uint8_t* map = tap_->dirtyMap();
     for (uint32_t r = 0; r < mi.fbHeight; ++r) {

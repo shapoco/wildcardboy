@@ -1,6 +1,6 @@
 # pretest — TJP カード動作テスト用ファームウェア
 
-本体ハードウェアの事前テスト用の仮ファームウェア。TJP カード (ATtiny85 / TinyJoypad 互換) を対象とする。
+本体ハードウェアの事前テスト用の仮ファームウェア。TJP カード (ATtiny85 / Tinyjoypad 互換) を対象とする。
 
 ## 動作
 
@@ -12,7 +12,7 @@
    ピン機能を切り替え、使わない側は Hi-Z にする (挿抜の擾乱を本体側バスに波及させない)。
 3. 検出後:
    - LCIO5-9 (キー, open-drain active-low) / LCIO13 (RESET) を初期化
-   - LcdTap を TinyJoypad preset (SSD1306, I2C slave 0x3C on LCIO2/3) で起動
+   - LcdTap を Tinyjoypad preset (SSD1306, I2C slave 0x3C on LCIO2/3) で起動
    - LCIO13 で ATtiny85 をリセット
 4. 以降ループ:
    - PCA9555 (0x21, HAUX) の本体キー → LCIO5-9 へ転送 (L/R/U/D/A のみ)

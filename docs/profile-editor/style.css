@@ -1,0 +1,74 @@
+/* Card Profile Editor layout */
+
+.toolbar { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-left: auto; }
+.toolbar .sep { width: 1px; height: 1.6em; background: var(--border); margin: 0 0.3rem; }
+
+main.split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0;
+  align-items: start;
+}
+#panel-settings { padding: 0.75rem 1.25rem 2rem; }
+#panel-json {
+  position: sticky;
+  top: var(--header-h, 57px);
+  height: calc(100vh - var(--header-h, 57px));
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+  padding: 0.75rem;
+}
+#json {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 12rem;
+  resize: none;
+  white-space: pre;
+  overflow: auto;
+  tab-size: 2;
+}
+#status { margin-top: 0.5rem; font-size: 0.85rem; min-height: 1.5em; }
+#status ul { margin: 0.25em 0 0; padding-left: 1.25em; }
+#status .info { color: var(--text-muted); font-family: var(--font-mono); }
+
+.tabs { display: none; position: sticky; top: var(--header-h, 57px); z-index: 90; }
+
+@media (max-width: 899px) {
+  .tabs { display: flex; }
+  main.split { grid-template-columns: minmax(0, 1fr); }
+  #panel-json { position: static; height: auto; min-height: 60vh; border-left: none; }
+  main.split[data-tab="settings"] #panel-json { display: none; }
+  main.split[data-tab="json"] #panel-settings { display: none; }
+}
+
+/* Settings panel */
+.field { display: grid; grid-template-columns: 9rem minmax(0, 1fr); gap: 0.4rem 0.75rem; align-items: center; margin: 0.5rem 0; }
+.field label { color: var(--text-muted); }
+.field .counter { font-size: 0.8rem; color: var(--text-muted); margin-left: 0.5rem; white-space: nowrap; }
+.field .counter.over { color: var(--red); }
+.field input[type="text"] { width: 100%; max-width: 28rem; }
+.field select { max-width: 28rem; }
+
+table.ports td:first-child, table.ports th:first-child { white-space: nowrap; font-family: var(--font-mono); }
+table.ports .hint { color: var(--text-muted); font-size: 0.8rem; white-space: nowrap; }
+table.ports select { padding: 0.15em 0.3em; }
+table.ports td.neg { text-align: center; }
+table.ports th.neg { text-align: center; }
+table.disabled { opacity: 0.5; }
+
+table.cfg td.val input[type="number"], table.cfg td.val input[type="text"] { width: 7rem; }
+table.cfg td.base { color: var(--text-muted); font-family: var(--font-mono); font-size: 0.85rem; white-space: nowrap; }
+table.cfg td.unit { color: var(--text-muted); font-size: 0.85rem; }
+
+table.keymap td:first-child { white-space: nowrap; }
+
+.note { color: var(--text-muted); font-size: 0.85rem; }
+.sect-head { display: flex; align-items: baseline; gap: 0.75rem; }
+.sect-head h2 { flex: 1; }
+
+@media (max-width: 600px) {
+  .field { grid-template-columns: 1fr; gap: 0.15rem; }
+  table.ports .hint { display: none; }
+}

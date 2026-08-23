@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WildCardBoy Card Profile Editor</title>
+<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header id="header">
+  <h1>WildCardBoy Card Profile Editor</h1>
+  <div class="toolbar">
+    <button id="btn-import-json" type="button">Import JSON</button>
+    <button id="btn-export-json" type="button">Export JSON</button>
+    <span class="sep"></span>
+    <button id="btn-import-hex" type="button">Import HEX</button>
+    <button id="btn-export-hex" type="button" class="primary">Export HEX</button>
+    <input id="file-json" type="file" accept=".json,application/json" hidden>
+    <input id="file-hex" type="file" accept=".hex,.ihex,.eep,text/plain" hidden>
+  </div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button type="button" class="tab active" data-tab="settings">Settings</button>
+  <button type="button" class="tab" data-tab="json">JSON</button>
+</nav>
+
+<main class="split" id="main" data-tab="settings">
+
+  <section id="panel-settings">
+    <h2>Card</h2>
+    <div class="field">
+      <label for="f-id">ID</label>
+      <div><input id="f-id" type="text" spellcheck="false" autocomplete="off"><span class="counter" id="c-id"></span></div>
+      <label for="f-name">Name</label>
+      <div><input id="f-name" type="text" spellcheck="false" autocomplete="off"><span class="counter" id="c-name"></span></div>
+    </div>
+
+    <h2>LCIO ports</h2>
+    <p class="note">Signal roles of LCD / TF / keypad interfaces are fixed per LCIO (see SPEC.md); the function only marks who owns the pin.</p>
+    <table class="ports" id="t-lcio">
+      <thead><tr><th>LCIO</th><th>Function</th><th>Direction</th><th>Pull</th><th class="neg">Neg.</th><th>Fixed roles</th></tr></thead>
+      <tbody></tbody>
+    </table>
+
+    <h2>LcdTap</h2>
+    <div class="field">
+      <label for="f-preset">Preset</label>
+      <div><select id="f-preset"></select></div>
+    </div>
+    <h3>Overrides (lcdtap.cfg)</h3>
+    <table class="cfg" id="t-cfg">
+      <thead><tr><th></th><th>Parameter</th><th>Preset</th><th>Value</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+
+    <h2>ISP</h2>
+    <div class="field">
+      <label for="f-isp-method">Method</label>
+      <div><select id="f-isp-method"></select></div>
+    </div>
+    <table class="ports" id="t-isp">
+      <thead><tr><th>LCIO</th><th>Function</th><th>Direction</th><th>Pull</th><th class="neg">Neg.</th><th>Fixed roles</th></tr></thead>
+      <tbody></tbody>
+    </table>
+
+    <h2>Key map</h2>
+    <p class="note">Host button &rarr; logic card button. Unmapped host buttons are not forwarded.</p>
+    <table class="keymap" id="t-keymap">
+      <thead><tr><th>Host button</th><th>Card button</th></tr></thead>
+      <tbody></tbody>
+    </table>
+
+    <h2>About</h2>
+    <p class="note">
+      Edits the card profile stored in the logic card's EEPROM (see <code>SPEC.md</code>, "カードプロファイルチップ").
+      <b>Export HEX</b> writes the EEPROM image (4-byte length, CBOR, CRC32) as Intel HEX, to be placed on the TF card and
+      written to the card by WildCardBoy. The JSON on the right is the same profile in readable form; both sides stay in sync.
+    </p>
+  </section>
+
+  <section id="panel-json">
+    <textarea id="json" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" wrap="off"></textarea>
+    <div id="status"></div>
+  </section>
+
+</main>
+
+<footer>WildCardBoy &middot; <a href="https://github.com/shapoco/wildcardboy">github.com/shapoco/wildcardboy</a></footer>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-// WildCardBoy pretest firmware: TJP (TinyJoypad) logic card bring-up.
+// WildCardBoy pretest firmware: TJP (Tinyjoypad) logic card bring-up.
 //
 //   1. Detect the card by probing its ID EEPROM over LCAUX I2C
 //      (3 consecutive ACKs, 200 ms apart, debounce the hot-plug).
@@ -86,7 +86,7 @@ static void startTjpCard() {
   // WildCardBus: key lines / reset released.
   cardIoInit();
 
-  // LcdTap: TinyJoypad preset (SSD1306, I2C, 128x64), output raster equal
+  // LcdTap: Tinyjoypad preset (SSD1306, I2C, 128x64), output raster equal
   // to the host LCD so one fillScanline() call is one LCD line.
   lcdtap::LcdTapConfig cfg;
   lcdtap::getPresetConfig(lcdtap::ConfigPreset::TINYJOYPAD, &cfg);
