@@ -1,6 +1,6 @@
 #pragma once
 
-// WildCardBoy host controller pin map (see SPEC.md) and constants shared by
+// WildCardBoy host controller pin map (see spec/01_host_interfaces.md, spec/02_wildcardbus.md) and constants shared by
 // the pretest firmware.
 
 #include <cstdint>
@@ -87,7 +87,7 @@ static constexpr uint PIN_LC_ISP_MISO = 9;  // LCIO9 -> PB1
 // SSD1306 I2C slave address the ATtiny85 talks to.
 static constexpr uint8_t ADDR_LC_LCD = 0x3C;
 
-// TF card layout (see SPEC.md).
+// TF card layout (see spec/05_tf_card.md).
 static constexpr const char* CARD_ID = "TJP";
 static constexpr const char* APPS_DIR = "/WCB/Cards/TJP/Apps";
 static constexpr uint32_t TINY85_FLASH_SIZE = 8192;

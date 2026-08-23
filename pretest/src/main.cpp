@@ -10,7 +10,7 @@
 //   (FatFs over SPI0) and programs the selected .bin/.hex into the ATtiny85
 //   over ISP (LCIO2/3/9/13) while the I2C1 slave is suspended.
 //
-// Debug output: USB CDC. See ../SPEC.md for the pin map.
+// Debug output: USB CDC. See ../spec/ for the pin map.
 
 #include <cstdio>
 #include <cstdlib>

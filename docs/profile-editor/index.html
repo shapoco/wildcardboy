@@ -39,7 +39,7 @@
     </div>
 
     <h2>LCIO ports</h2>
-    <p class="note">Signal roles of LCD / TF / keypad interfaces are fixed per LCIO (see SPEC.md); the function only marks who owns the pin.</p>
+    <p class="note">Signal roles of LCD / TF / keypad interfaces are fixed per LCIO (see spec/02_wildcardbus.md); the function only marks who owns the pin.</p>
     <table class="ports" id="t-lcio">
       <thead><tr><th>LCIO</th><th>Function</th><th>Direction</th><th>Pull</th><th class="neg">Neg.</th><th>Fixed roles</th></tr></thead>
       <tbody></tbody>
@@ -75,7 +75,7 @@
 
     <h2>About</h2>
     <p class="note">
-      Edits the card profile stored in the logic card's EEPROM (see <code>SPEC.md</code>, "カードプロファイルチップ").
+      Edits the card profile stored in the logic card's EEPROM (see <code>spec/03_card_profile.md</code>).
       <b>Export HEX</b> writes the EEPROM image (4-byte length, CBOR, CRC32) as Intel HEX, to be placed on the TF card and
       written to the card by WildCardBoy. The JSON on the right is the same profile in readable form; both sides stay in sync.
     </p>

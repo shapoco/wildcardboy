@@ -1,4 +1,4 @@
-// Minimal CBOR codec for card profiles (see SPEC.md "カードプロファイルチップ").
+// Minimal CBOR codec for card profiles (see spec/03_card_profile.md).
 //
 // encode(): definite-length only; integers (major 0/1), text strings
 // (major 3), arrays (major 4), maps with text keys (major 5, insertion

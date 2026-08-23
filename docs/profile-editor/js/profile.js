@@ -1,4 +1,4 @@
-// Card profile schema (SPEC.md "カードプロファイルチップ"): constants,
+// Card profile schema (spec/03_card_profile.md): constants,
 // default profile, normalization (canonical key order) and validation.
 
 import { CONFIG_BY_ID, PRESET_NAMES } from './lcdtap_config.js';
