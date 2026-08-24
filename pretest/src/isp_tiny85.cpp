@@ -15,10 +15,11 @@ namespace wcb {
 // (ISP needs SCK < f_cpu / 4; the factory 1 MHz allows up to 250 kHz).
 static constexpr uint32_t SCK_HALF_US = 5;
 static constexpr uint32_t TWD_FLASH_MS = 5;   // tWD_FLASH 4.5 ms
-static constexpr uint32_t TWD_ERASE_MS = 10;  // tWD_ERASE 9.0 ms
+static constexpr uint32_t TWD_ERASE_MS = 11;  // tWD_ERASE 9.0 ms (t85) / 10.5 ms (m32u4)
 static constexpr int PE_RETRIES = 5;
 
 static IspPins sPins = {0, 0, 0};
+static const AvrDevice* sDev = nullptr;
 
 //-----------------------------------------------------------------------------
 // Bit level
@@ -87,8 +88,10 @@ static void pinsRelease() {
   }
 }
 
-bool ispBegin(const IspPins& pins) {
+bool ispBegin(const IspPins& pins, const AvrDevice* dev) {
   sPins = pins;
+  sDev = dev;
+  if (!sDev) return false;
   cardKeysRelease();
   pinsProgramming();
 
@@ -127,10 +130,10 @@ void ispReadDevice(IspDeviceInfo* info) {
   info->lock = cmd4r(0x58, 0x00, 0x00, 0x00);
 }
 
-bool ispIsTiny85(const IspDeviceInfo& info) {
-  return info.signature[0] == TINY85_SIGNATURE[0] &&
-         info.signature[1] == TINY85_SIGNATURE[1] &&
-         info.signature[2] == TINY85_SIGNATURE[2];
+bool ispSignatureMatches(const IspDeviceInfo& info) {
+  return sDev && info.signature[0] == sDev->signature[0] &&
+         info.signature[1] == sDev->signature[1] &&
+         info.signature[2] == sDev->signature[2];
 }
 
 bool ispChipErase() {
@@ -148,14 +151,15 @@ static bool pageIsBlank(const uint8_t* p, uint32_t n) {
 
 bool ispWriteFlash(const uint8_t* img, uint32_t len, IspProgressFn cb,
                    void* user) {
-  if (len > TINY85_FLASH_SIZE) return false;
+  if (!sDev || len > sDev->flashSize) return false;
+  const uint32_t pageBytes = sDev->pageBytes;
   uint32_t written = 0;
-  for (uint32_t base = 0; base < len; base += TINY85_PAGE_BYTES) {
+  for (uint32_t base = 0; base < len; base += pageBytes) {
     uint32_t n = len - base;
-    if (n > TINY85_PAGE_BYTES) n = TINY85_PAGE_BYTES;
+    if (n > pageBytes) n = pageBytes;
     if (!pageIsBlank(img + base, n)) {
       // Load the page buffer (word address within page = byte/2).
-      for (uint32_t i = 0; i < TINY85_PAGE_BYTES; i += 2) {
+      for (uint32_t i = 0; i < pageBytes; i += 2) {
         uint8_t lo = (i < n) ? img[base + i] : 0xFF;
         uint8_t hi = (i + 1 < n) ? img[base + i + 1] : 0xFF;
         uint8_t w = static_cast<uint8_t>(i >> 1);
@@ -171,7 +175,7 @@ bool ispWriteFlash(const uint8_t* img, uint32_t len, IspProgressFn cb,
     }
     if (cb) cb(static_cast<int>((base + n) * 100 / len), user);
   }
-  printf("[isp] %lu pages written\n", static_cast<unsigned long>(written));
+  printf("[isp] %lu pages written (%s)\n", static_cast<unsigned long>(written), sDev->name);
   return true;
 }
 

@@ -100,6 +100,7 @@ const edited = json();
 edited.id = 'XYZ';
 edited.lcdtap.preset = 'Arduboy';
 edited.isp.method = 16;
+edited.isp.mcu = 'rp2350';
 edited.lcio.ports = [{ i: 13, f: 32, m: 36 }, { i: 40, f: 20, m: 34 }];
 edited.lcio.useTfCard = true;
 $('#json').value = JSON.stringify(edited);
@@ -108,6 +109,10 @@ await sleep(400);
 assert.equal($('#f-id').value, 'XYZ');
 assert.equal($('#f-preset').value, 'Arduboy');
 assert.equal($('#f-isp-method').value, '16');
+assert.equal($('#f-isp-mcu').value, 'rp2350');
+// settings -> JSON for the MCU select
+$('#f-isp-mcu').value = 'rp2040'; fire($('#f-isp-mcu'), 'change');
+assert.equal(json().isp.mcu, 'rp2040');
 assert.equal(fn0.value, '0');
 const [fn13] = $('#t-lcio tbody').children[13].querySelectorAll('select');
 assert.equal(fn13.value, '32');

@@ -37,6 +37,7 @@ void cardBootselAssert();
 void cardBootselRelease();
 
 IspMode cardIspMode();
+const char* cardIspMcu();  // isp.mcu (may be an empty string)
 bool cardUseTfCard();
 
 // SPI ISP pins from the profile's isp table; false if not available.

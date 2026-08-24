@@ -58,6 +58,19 @@ static constexpr uint8_t SPI = 1;
 static constexpr uint8_t USB_MSC = 16;
 }  // namespace isp_method
 
+// AVR devices programmable over the SPI ISP (isp.mcu).
+struct AvrDevice {
+  const char* id;        // MCU ID in the profile
+  const char* name;
+  uint8_t signature[3];
+  uint32_t flashSize;    // bytes
+  uint32_t pageBytes;    // flash page size
+};
+
+// nullptr when `id` is not a known AVR device. An empty id resolves to
+// ATtiny85 (default for isp.method = 1, backward compatible).
+const AvrDevice* avrDeviceById(const char* id);
+
 struct PortCfg {
   uint8_t f = 0;
   uint8_t m = 0;
@@ -76,6 +89,7 @@ struct CardProfile {
   } lcdtapCfg[static_cast<int>(lcdtap::Configs::NUM_CONFIGS)];
   uint8_t lcdtapCfgCount;
   uint8_t ispMethod;
+  char ispMcu[17];  // MCU ID ("attiny85", "atmega32u4", ...); may be empty
   PortCfg isp[NUM_LCIO];
   uint8_t keymap[NUM_BUTTONS];  // host button -> card button, 0xFF = unmapped
 };

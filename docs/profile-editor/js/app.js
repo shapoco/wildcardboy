@@ -1,7 +1,7 @@
 // Card Profile Editor: settings UI <-> JSON <-> EEPROM image (Intel HEX).
 
 import {
-  DEFAULT_PROFILE, FUNCTIONS, ISP_FUNCTIONS, ISP_METHODS, BUTTONS, MODE,
+  DEFAULT_PROFILE, FUNCTIONS, ISP_FUNCTIONS, ISP_METHODS, MCU_IDS, BUTTONS, MODE,
   LCIO_GPIO_LIST, LCIO_PCA_LIST, isPcaLcio, lcioHint,
   ID_MAX_BYTES, NAME_MAX_BYTES, utf8Len, normalize, validate, hasErrors,
 } from './profile.js';
@@ -103,6 +103,8 @@ function buildSettings() {
   $('#f-usetf').addEventListener('change', onUiChange);
   $('#f-preset').append(...PRESET_NAMES.map(n => option(n, n)));
   $('#f-isp-method').append(...ISP_METHODS.map(m => option(m.v, m.name)));
+  $('#f-isp-mcu').append(option('', '(not set)'), ...MCU_IDS.map(id => option(id, id)));
+  $('#f-isp-mcu').addEventListener('change', onUiChange);
   buildCfgTable();
   buildKeymapTable();
   for (const id of ['#f-id', '#f-name']) $(id).addEventListener('input', onUiChange);
@@ -180,6 +182,9 @@ function renderSettings() {
     renderCfg();
     const m = $('#f-isp-method');
     m.value = String(profile.isp.method);
+    const mcuSel = $('#f-isp-mcu');
+    mcuSel.value = profile.isp.mcu ?? '';
+    if (profile.isp.mcu && mcuSel.value !== profile.isp.mcu) mcuSel.value = '';  // unknown id: blank
     renderPorts(ui.isp, profile.isp.ports);
     $('#t-isp').classList.toggle('disabled', profile.isp.method === 0);
     const map = new Map(profile.keymap.map.map(e => [e.s, e.d]));
@@ -235,6 +240,12 @@ function readSettings() {
   if (p.lcdtap.cfg) for (const [k, v] of Object.entries(p.lcdtap.cfg)) if (!CONFIG_ENTRIES.some(e => e.id === k)) cfg[k] = v;
   if (Object.keys(cfg).length) p.lcdtap.cfg = cfg; else delete p.lcdtap.cfg;
   p.isp.method = Number($('#f-isp-method').value) | 0;
+  {
+    const mcu = $('#f-isp-mcu').value;
+    if (mcu !== '') p.isp.mcu = mcu;
+    else if (!(profile.isp.mcu && !MCU_IDS.includes(profile.isp.mcu))) delete p.isp.mcu;
+    // (an unknown id from the JSON side is kept while the select shows blank)
+  }
   p.isp.ports = readPorts(ui.isp);
   p.keymap.map = [];
   ui.keymap.forEach((sel, s) => { if (sel.value !== '') p.keymap.map.push({ s, d: Number(sel.value) | 0 }); });

@@ -37,8 +37,9 @@ core0 = UI / 本体 LCD 出力 / カード制御、core1 = LcdTap 入力 (I2C �
        UF2 ブロックを直接セクタ書き込み → USB 切断 (= Flash 書き込み完了) を待つ
    - `Profile`: `/WCB/Cards/` からプロファイルの `.hex` ([docs/profile-editor](../docs/profile-editor/) で生成、標準は
      `/WCB/Cards/<id>/profile.hex`) を選ぶと SRAM に展開して長さ / CRC / CBOR を検証し、id / name を表示して
-     「Overwrite card profile?」→ A で EEPROM (24LC256) に書き込み → 読み戻し検証 → 稼働中のカードを停止して検出をやり直す。
-     CBOR の上限は 4 KB。
+     「Overwrite card profile?」→ A で EEPROM に書き込み → 読み戻し検証 → 稼働中のカードを停止して検出をやり直す。
+     CBOR の上限は 4 KB。EEPROM のページサイズ (8-256 B) は書き込み前に自動判定する (ページ折り返しを利用。
+     2 バイトアドレスの 24C32 以上が対象で、判定失敗時は "Unsupported EEPROM")。
 
 ## TF カード
 

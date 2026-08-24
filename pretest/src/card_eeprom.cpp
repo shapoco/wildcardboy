@@ -10,7 +10,7 @@
 
 namespace wcb {
 
-static constexpr uint32_t PAGE_SIZE = 64;
+static constexpr uint32_t MAX_PAGE_SIZE = 256;
 static constexpr uint32_t READ_CHUNK = 128;
 static constexpr uint32_t XFER_TIMEOUT_US = 20000;
 static constexpr uint32_t WRITE_CYCLE_TIMEOUT_MS = 20;  // tWC = 5 ms typ.
@@ -48,15 +48,35 @@ static bool waitWriteCycle() {
   return false;
 }
 
+uint32_t eepromDetectPageSize() {
+  // One page write of a 256-byte ramp at address 0; the wrap folds the tail
+  // onto the head, so byte 0 ends up as (256 - pageSize).
+  uint8_t pattern[MAX_PAGE_SIZE];
+  for (uint32_t i = 0; i < MAX_PAGE_SIZE; ++i) pattern[i] = static_cast<uint8_t>(i);
+  if (!eepromWrite(0, pattern, MAX_PAGE_SIZE, MAX_PAGE_SIZE)) return 0;
+  uint8_t head = 0xFF;
+  if (!eepromRead(0, &head, 1)) return 0;
+  uint32_t page = MAX_PAGE_SIZE - head;  // head == 0 -> 256
+  switch (page) {
+    case 8: case 16: case 32: case 64: case 128: case 256:
+      printf("[eeprom] page size %lu bytes\n", static_cast<unsigned long>(page));
+      return page;
+    default:
+      printf("[eeprom] page size detection failed (head byte 0x%02x)\n", head);
+      return 0;
+  }
+}
+
 bool eepromWrite(uint16_t addr, const uint8_t* src, uint32_t len,
-                 EepromProgressFn cb, void* user) {
+                 uint32_t pageSize, EepromProgressFn cb, void* user) {
+  if (pageSize < 8 || pageSize > MAX_PAGE_SIZE || (pageSize & (pageSize - 1))) return false;
   auxSelectLcaux();
   const uint32_t total = len;
   uint32_t done = 0;
   while (len > 0) {
-    uint32_t room = PAGE_SIZE - (addr % PAGE_SIZE);
+    uint32_t room = pageSize - (addr % pageSize);
     uint32_t n = len < room ? len : room;
-    uint8_t frame[2 + PAGE_SIZE];
+    uint8_t frame[2 + MAX_PAGE_SIZE];
     frame[0] = static_cast<uint8_t>(addr >> 8);
     frame[1] = static_cast<uint8_t>(addr);
     for (uint32_t i = 0; i < n; ++i) frame[2 + i] = src[i];

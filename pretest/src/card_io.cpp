@@ -24,6 +24,7 @@ static uint8_t sKeymap[NUM_BUTTONS];
 static int sResetIdx = -1;
 static int sBootselIdx = -1;
 static uint8_t sIspMethod = 0;
+static char sIspMcu[17];
 static bool sUseTfCard = false;
 static PortCfg sIsp[NUM_LCIO];
 static uint16_t sLastKeys = 0;
@@ -147,6 +148,7 @@ void cardIoConfigure(const CardProfile& p) {
   cardIoRelease();
   memcpy(sKeymap, p.keymap, sizeof(sKeymap));
   sIspMethod = p.ispMethod;
+  memcpy(sIspMcu, p.ispMcu, sizeof(sIspMcu));
   sUseTfCard = p.useTfCard;
   memcpy(sIsp, p.isp, sizeof(sIsp));
   sPcaOut = 0xFFFF;
@@ -229,6 +231,8 @@ IspMode cardIspMode() {
   if (sIspMethod == isp_method::USB_MSC) return IspMode::USB;
   return IspMode::NONE;
 }
+
+const char* cardIspMcu() { return sIspMcu; }
 
 bool cardUseTfCard() { return sUseTfCard; }
 

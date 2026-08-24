@@ -74,7 +74,8 @@ static uint8_t gStageBuf[PROFILE_FRAME_MAX];    // profile staged for writing
 static uint32_t gStageLen = 0;
 static CardProfile gStageProfile;
 
-static uint8_t gAppImage[TINY85_FLASH_SIZE];
+static constexpr uint32_t APP_IMAGE_MAX = 32768;  // largest AVR flash (ATmega32U4)
+static uint8_t gAppImage[APP_IMAGE_MAX];
 
 static inline uint32_t nowMs() { return to_ms_since_boot(get_absolute_time()); }
 
@@ -217,15 +218,18 @@ static bool hasExt(const char* path, const char* ext) {
   return dot && strcasecmp(dot, ext) == 0;
 }
 
-// ATtiny85 over SPI ISP. Card is stopped (RESET asserted) on entry and exit.
+// AVR over SPI ISP. Card is stopped (RESET asserted) on entry and exit.
 static const char* programAppSpi(const char* path) {
   IspPins pins;
   if (!cardIspPins(&pins)) return "ISP pins not in profile";
+  const AvrDevice* mcu = avrDeviceById(cardIspMcu());
+  if (!mcu) return "Unknown ISP MCU";
 
-  printf("[prog] loading %s\n", path);
+  printf("[prog] loading %s (target %s, flash %lu B)\n", path, mcu->name,
+         static_cast<unsigned long>(mcu->flashSize));
   gUi.progress("Load", 0);
   uint32_t len = 0;
-  LoadResult lr = appImageLoad(path, gAppImage, sizeof(gAppImage), &len);
+  LoadResult lr = appImageLoad(path, gAppImage, mcu->flashSize, &len);
   if (lr != LoadResult::OK) {
     printf("[prog] load failed: %s\n", loadResultName(lr));
     return loadResultName(lr);
@@ -236,7 +240,7 @@ static const char* programAppSpi(const char* path) {
   const char* err = nullptr;
   uint64_t t0 = time_us_64();
   do {
-    if (!ispBegin(pins)) {
+    if (!ispBegin(pins, mcu)) {
       err = "ISP enable failed";
       break;
     }
@@ -245,8 +249,8 @@ static const char* programAppSpi(const char* path) {
     printf("[prog] signature %02x %02x %02x  fuses L=%02x H=%02x E=%02x lock=%02x\n",
            dev.signature[0], dev.signature[1], dev.signature[2], dev.fuseLow,
            dev.fuseHigh, dev.fuseExt, dev.lock);
-    if (!ispIsTiny85(dev)) {
-      err = "Not an ATtiny85";
+    if (!ispSignatureMatches(dev)) {
+      err = "Signature mismatch";
       break;
     }
     gUi.progress("Erase", 0);
@@ -318,9 +322,13 @@ static const char* hookWriteProfile(void*) {
   if (gStageLen == 0) return "Nothing to write";
   if (!cardEepromProbe()) return "Card EEPROM not responding";
 
+  // The write-page size depends on the EEPROM model; detect it first (this
+  // scribbles over the first 256 bytes, which the profile write replaces).
   gUi.progress("Write", 0);
   uint64_t t0 = time_us_64();
-  if (!eepromWrite(0, gStageBuf, gStageLen, eepromProgressWrite, nullptr)) {
+  uint32_t pageSize = eepromDetectPageSize();
+  if (pageSize == 0) return "Unsupported EEPROM";
+  if (!eepromWrite(0, gStageBuf, gStageLen, pageSize, eepromProgressWrite, nullptr)) {
     return "EEPROM write failed";
   }
   gUi.progress("Verify", 0);

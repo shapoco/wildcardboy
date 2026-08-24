@@ -43,6 +43,7 @@ CBOR オブジェクトの内容は次の通り。
 
   // ロジックカード上の MCU へのプログラム書き込みに使用する ISP プロトコル
   "isp": {
+    "mcu": "<MCU ID>", // 最大 16 バイト (ヌル終端除く)
     "method": <ISPプロトコル番号>,
     "ports": [ // LCIO を使って書き込みを行う場合
       {
@@ -132,6 +133,15 @@ ISP プロトコル番号は次の通り。
 |0|未使用|
 |1|SPI|
 |16|USB (Mass Storage Class)|
+
+## MCU ID
+
+|ID|MCU|
+|---|---|
+|attiny85|ATtiny85|
+|atmega32u4|ATmega32U4|
+|rp2040|Raspberry Pi Pico|
+|rp2350|Raspberry Pi Pico 2|
 
 ## キーマップのボタン番号
 

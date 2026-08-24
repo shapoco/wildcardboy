@@ -42,6 +42,18 @@ assert.throws(() => encode({ x: null }));
   assert.ok(!errs.some(m => m.includes('LCIO32')));
   assert.ok(!errs.some(m => m.includes('LCIO33')));  // open-drain + negative is fine
 }
+// isp.mcu round-trips and is validated
+{
+  const p = normalize({ ...DEFAULT_PROFILE, isp: { ...DEFAULT_PROFILE.isp, mcu: 'atmega32u4' } });
+  assert.equal(p.isp.mcu, 'atmega32u4');
+  assert.deepEqual(Object.keys(p.isp), ['mcu', 'method', 'ports']);
+  assert.deepEqual(normalize(decode(encode(p)).value), p);
+  assert.ok(!validate(p).some(m => m.level === 'error'));
+  const q = normalize({ ...DEFAULT_PROFILE, isp: { ...DEFAULT_PROFILE.isp, mcu: 'z80' } });
+  assert.ok(validate(q).some(m => m.level === 'warn' && m.msg.includes('z80')));
+  const r = normalize({ ...DEFAULT_PROFILE, isp: { ...DEFAULT_PROFILE.isp, mcu: 'A'.repeat(17) } });
+  assert.ok(validate(r).some(m => m.level === 'error' && m.msg.includes('isp.mcu')));
+}
 // USB ISP needs RESET + BOOTSEL
 {
   const p = normalize({ ...DEFAULT_PROFILE, isp: { method: 16, ports: [{ i: 13, f: 32, m: 36 }] } });

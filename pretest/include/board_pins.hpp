@@ -89,6 +89,5 @@ static constexpr uint32_t SYS_CLOCK_HZ = 288'000'000;
 
 // TF card layout (see spec/05_tf_card.md).
 static constexpr const char* CARDS_DIR = "/WCB/Cards";
-static constexpr uint32_t TINY85_FLASH_SIZE = 8192;
 
 }  // namespace wcb

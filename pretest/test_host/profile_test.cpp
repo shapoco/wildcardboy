@@ -59,6 +59,14 @@ int main(int argc, char** argv) {
   assert(p.lcio[13].f == func::RESET && p.lcio[13].m == 36);
   assert(p.lcio[0].f == 0 && p.lcio[0].m == 0);
   assert(p.ispMethod == 1);
+  assert(p.ispMcu[0] == '\0');  // TJP profile predates isp.mcu
+  {
+    const AvrDevice* d = avrDeviceById(p.ispMcu);
+    assert(d && strcmp(d->id, "attiny85") == 0 && d->flashSize == 8192 && d->pageBytes == 64);
+    d = avrDeviceById("atmega32u4");
+    assert(d && d->flashSize == 32768 && d->pageBytes == 128 && d->signature[1] == 0x95);
+    assert(avrDeviceById("z80") == nullptr);
+  }
   assert(p.isp[2].f == func::ISP_MOSI && p.isp[2].m == 2);
   assert(p.isp[9].f == func::ISP_MISO && p.isp[9].m == 1);
   assert(p.keymap[0] == 0 && p.keymap[5] == 4 && p.keymap[7] == 4 && p.keymap[8] == 0xFF);

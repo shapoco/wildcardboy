@@ -32,6 +32,12 @@ export const FUNCTION_VALUES = new Set(FUNCTIONS.map(f => f.v));
 export const MODE = { INPUT: 1, OUTPUT: 2, OPEN_DRAIN: 4, PULL_UP: 8, PULL_DOWN: 16, NEGATIVE: 32 };
 export const MODE_MAX = 63;
 
+// MCU IDs (spec/03_card_profile.md "MCU ID").
+export const MCU_IDS = ['attiny85', 'atmega32u4', 'rp2040', 'rp2350'];
+export const MCU_ID_MAX_BYTES = 16;
+// MCUs programmable per ISP method.
+export const MCU_BY_METHOD = { 1: ['attiny85', 'atmega32u4'], 16: ['rp2040', 'rp2350'] };
+
 export const ISP_METHODS = [
   { v: 0, name: 'Unused' },
   { v: 1, name: 'SPI' },
@@ -142,7 +148,11 @@ export function normalize(src) {
       }
       return copyUnknown(o, lcdtap, ['preset', 'cfg']);
     })(),
-    isp: copyUnknown({ method: toInt(isp.method), ports: normalizePorts(isp.ports) }, isp, ['method', 'ports']),
+    isp: copyUnknown(
+      Object.assign(
+        typeof isp.mcu === 'string' && isp.mcu !== '' ? { mcu: String(isp.mcu) } : {},
+        { method: toInt(isp.method), ports: normalizePorts(isp.ports) }),
+      isp, ['mcu', 'method', 'ports']),
     keymap: copyUnknown({
       map: (Array.isArray(keymap.map) ? keymap.map : [])
         .filter(isObj).map(e => ({ s: toInt(e.s), d: toInt(e.d) })).sort((a, b) => a.s - b.s),
@@ -214,6 +224,17 @@ export function validate(p) {
   }
 
   if (!ISP_METHOD_VALUES.has(p.isp.method)) err(`isp.method ${p.isp.method} is unknown`);
+  if (p.isp.mcu != null) {
+    const mcuLen = utf8Len(p.isp.mcu);
+    if (mcuLen > MCU_ID_MAX_BYTES) err(`isp.mcu is ${mcuLen} bytes (max ${MCU_ID_MAX_BYTES})`);
+    if (!MCU_IDS.includes(p.isp.mcu)) warn(`isp.mcu "${p.isp.mcu}" is not a known MCU ID`);
+    const allowed = MCU_BY_METHOD[p.isp.method];
+    if (allowed && MCU_IDS.includes(p.isp.mcu) && !allowed.includes(p.isp.mcu)) {
+      warn(`isp.mcu "${p.isp.mcu}" does not match isp.method ${p.isp.method}`);
+    }
+  } else if (p.isp.method !== 0) {
+    warn('isp.mcu is not set (the host assumes a default MCU for the method)');
+  }
 
   const seenS = new Set();
   for (const e of p.keymap.map) {

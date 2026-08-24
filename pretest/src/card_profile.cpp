@@ -245,6 +245,12 @@ static ProfileError decodeCbor(const uint8_t* cbor, uint32_t len, CardProfile* o
     int64_t method = getIntOr(&ctx, "method", 0);
     if (method < 0 || method > 255) return ProfileError::CBOR_ERROR;
     out->ispMethod = static_cast<uint8_t>(method);
+    QCBORDecode_GetTextStringInMapSZ(&ctx, "mcu", &s);
+    if (optional(&ctx)) {
+      if (!copyText(s, out->ispMcu, sizeof(out->ispMcu) - 1)) return ProfileError::CBOR_ERROR;
+    } else if (QCBORDecode_GetError(&ctx) != QCBOR_SUCCESS) {
+      return ProfileError::CBOR_ERROR;
+    }
     ProfileError e = decodePorts(&ctx, "ports", out->isp, "isp");
     if (e != ProfileError::OK) return e;
     QCBORDecode_ExitMap(&ctx);
@@ -312,6 +318,9 @@ static ProfileError checkProfile(CardProfile* p) {
     return ProfileError::UNSUPPORTED_LCD_BUS;
   }
 
+  if (p->ispMethod == isp_method::SPI && !avrDeviceById(p->ispMcu)) {
+    printf("[profile] warning: unknown SPI ISP MCU \"%s\" (ATtiny85 assumed unusable)\n", p->ispMcu);
+  }
   if (p->ispMethod == isp_method::USB_MSC) {
     if (profileFindIspOrLcioPort(*p, func::RESET) < 0 ||
         profileFindIspOrLcioPort(*p, func::BOOTSEL) < 0) {
@@ -363,6 +372,19 @@ void profileBuildLcdTapConfig(const CardProfile& p, lcdtap::LcdTapConfig* cfg) {
     lcdtap::setConfigValueById(cfg, p.lcdtapCfg[i].key, p.lcdtapCfg[i].value);
   }
   lcdtap::normalizeConfig(cfg);
+}
+
+static const AvrDevice AVR_DEVICES[] = {
+    {"attiny85", "ATtiny85", {0x1E, 0x93, 0x0B}, 8192, 64},
+    {"atmega32u4", "ATmega32U4", {0x1E, 0x95, 0x87}, 32768, 128},
+};
+
+const AvrDevice* avrDeviceById(const char* id) {
+  if (id == nullptr || id[0] == '\0') return &AVR_DEVICES[0];  // default: ATtiny85
+  for (const AvrDevice& d : AVR_DEVICES) {
+    if (strcmp(d.id, id) == 0) return &d;
+  }
+  return nullptr;
 }
 
 int profileFindPort(const PortCfg* ports, uint8_t function) {
