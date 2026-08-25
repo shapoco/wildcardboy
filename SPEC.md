@@ -10,4 +10,5 @@
 | [spec/03_card_profile.md](spec/03_card_profile.md) | カードプロファイルチップ (EEPROM) の内容 |
 | [spec/04_host_controller.md](spec/04_host_controller.md) | ホストコントローラの動作 (起動、システムメニュー、ファイルブラウザ、ゲームモード) |
 | [spec/05_tf_card.md](spec/05_tf_card.md) | TF カードのディレクトリ構成 |
-| [spec/06_tjp_card.md](spec/06_tjp_card.md) | TJP カード (Tinyjoypad 互換ロジックカード) |
+
+カード毎の仕様は [cards/](cards/) 配下の各サブディレクトリ (`SPEC.md`、`profile.json`、`profile.hex`) に置いている。
