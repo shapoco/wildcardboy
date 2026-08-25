@@ -23,6 +23,7 @@ CBOR オブジェクトの内容は次の通り。
   // ロジックカードの汎用 I/O の設定
   "lcio": {
     "useTfCard": <false|true>, // TF カード I/F を使用する場合は true。省略時は false。
+    "useVirtIoExp": <false|true>, // 仮想 I/O エキスパンダを使用する場合は true。省略時は false。
     "ports": [
       {
         "i": <LCIO番号>,
@@ -31,6 +32,12 @@ CBOR オブジェクトの内容は次の通り。
       },
       ...
     ]
+  },
+
+  // 仮想 I/O エキスパンダの設定 (lcio.useVirtIoExp が true の場合)
+  "virtIoExp": {
+    "chip": "<チップID>", // 現状は "mcp23017" のみ対応
+    "addr": <I2Cスレーブアドレス> // MCP23017 の場合は通常 32 (0x20)
   },
 
   // ロジックカードの LCD I/F の設定
@@ -77,10 +84,17 @@ LCIO 番号は次の通り。
 |0-13|LCIO0-13|
 |32-39|PCA9555 の P0_0-P0_7 (I2C 経由)|
 |40-47|PCA9555 の P1_0-P1_7 (I2C 経由)|
+|64-71|仮想 I/O エキスパンダの GPA0-7|
+|72-79|仮想 I/O エキスパンダの GPB0-7|
 
 LCIO32-47 はロジックカード上の PCA9555 (devaddr=0x20, LCAUX 経由) のポートであり、モードは `OUTPUT` または `OPEN_DRAIN` (+ `負論理`) を使用できる。
 オープンドレイン出力は PCA9555 の CONFIG レジスタによる入出力切替 (アサート = 出力 Low、解放 = 入力) で実現する。
 プルアップ/プルダウンの指定は無視される (入力時は PCA9555 内蔵の弱いプルアップ)。
+
+LCIO64-79 は `lcio.useVirtIoExp` が true の場合に有効な仮想ポートであり、キーパッド状態の受け渡しに使用する
+([02_wildcardbus.md](02_wildcardbus.md)、[04_host_controller.md](04_host_controller.md))。
+モードは `OPEN_DRAIN` + `負論理` を使用する (実チップのプルアップ入力 + アクティブ Low に相当)。
+プルアップ/プルダウンの指定は無視される。
 
 ## ポートの機能番号
 
@@ -109,6 +123,9 @@ LCIO32-47 はロジックカード上の PCA9555 (devaddr=0x20, LCAUX 経由) �
 |35|ISP (SCK)|
 |36|ISP (MOSI)|
 |37|ISP (MISO)|
+|38|ISP (UART TX)|
+|39|ISP (UART RX)|
+|48|I2C スレーブ|
 
 ## ポートのモード番号
 
@@ -132,6 +149,7 @@ ISP プロトコル番号は次の通り。
 |---|---|
 |0|未使用|
 |1|SPI|
+|2|UART (Espressif シリアルブートローダ)|
 |16|USB (Mass Storage Class)|
 
 ## MCU ID
@@ -140,6 +158,7 @@ ISP プロトコル番号は次の通り。
 |---|---|
 |attiny85|ATtiny85|
 |atmega32u4|ATmega32U4|
+|esp8266|ESP8266|
 |rp2040|Raspberry Pi Pico|
 |rp2350|Raspberry Pi Pico 2|
 
@@ -167,6 +186,11 @@ ISP プロトコル番号は次の通り。
 LCIO のポート設定と LcdTap/ISP の設定が衝突する場合は後者を優先する。
 
 `isp.method` が 16 (USB) の場合、`isp.ports` (または `lcio.ports`) に RESET (32) と BOOTSEL (33) のポートが必要である。
+`isp.method` が 2 (UART) の場合、`isp.ports` に ISP (UART TX) (38) と ISP (UART RX) (39) のポートが、
+`isp.ports` (または `lcio.ports`) に RESET (32) と BOOTSEL (33) のポートが必要である。
+UART には任意の LCIO を割り当てられるが、LCIO10 (TX) / LCIO11 (RX) を推奨する (ホスト側でハードウェア UART1 を使用できる)。
+`lcio.useVirtIoExp` が true の場合、`virtIoExp` メンバが必要であり、LCIO6/7 に機能番号 48 (I2C スレーブ) のポートを記述する。
+仮想 I/O エキスパンダは LCD I/F が SPI のカードでのみ使用できる ([02_wildcardbus.md](02_wildcardbus.md))。
 `lcio.useTfCard` が true のロジックカードは、動作中に TF カードを占有する (LCTF_ENAX=Low)。
 
 キーマップのボタン番号 `d` と LCIO の機能番号 `f` は `f = 16 + d` の関係にある。

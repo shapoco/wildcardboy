@@ -7,14 +7,19 @@ export const FORMAT = 'WCBCARD';
 export const ID_MAX_BYTES = 16;
 export const NAME_MAX_BYTES = 64;
 // LCIO numbering: 0..13 = bus GPIOs, 32..47 = card-side PCA9555 ports
-// (P0_0..P1_7 via LCAUX I2C). 14..31 do not exist.
+// (P0_0..P1_7 via LCAUX I2C), 64..79 = virtual I/O expander ports
+// (GPA0..GPB7, host-emulated on LCIO6/7). Other numbers do not exist.
 export const NUM_LCIO = 14;  // GPIO LCIOs
 export const LCIO_PCA_FIRST = 32;
 export const LCIO_PCA_COUNT = 16;
 export const LCIO_GPIO_LIST = Array.from({ length: NUM_LCIO }, (_, i) => i);
 export const LCIO_PCA_LIST = Array.from({ length: LCIO_PCA_COUNT }, (_, i) => LCIO_PCA_FIRST + i);
+export const LCIO_VIRT_FIRST = 64;
+export const LCIO_VIRT_COUNT = 16;
+export const LCIO_VIRT_LIST = Array.from({ length: LCIO_VIRT_COUNT }, (_, i) => LCIO_VIRT_FIRST + i);
 export const isPcaLcio = i => i >= LCIO_PCA_FIRST && i < LCIO_PCA_FIRST + LCIO_PCA_COUNT;
-export const isValidLcio = i => (i >= 0 && i < NUM_LCIO) || isPcaLcio(i);
+export const isVirtLcio = i => i >= LCIO_VIRT_FIRST && i < LCIO_VIRT_FIRST + LCIO_VIRT_COUNT;
+export const isValidLcio = i => (i >= 0 && i < NUM_LCIO) || isPcaLcio(i) || isVirtLcio(i);
 
 export const FUNCTIONS = [
   { v: 0, name: 'Unused' },
@@ -25,25 +30,31 @@ export const FUNCTIONS = [
   { v: 24, name: 'START' }, { v: 25, name: 'SELECT' }, { v: 26, name: 'L bumper' }, { v: 27, name: 'R bumper' },
   { v: 32, name: 'RESET' }, { v: 33, name: 'BOOTSEL' },
   { v: 34, name: 'ISP CS' }, { v: 35, name: 'ISP SCK' }, { v: 36, name: 'ISP MOSI' }, { v: 37, name: 'ISP MISO' },
+  { v: 38, name: 'ISP UART TX' }, { v: 39, name: 'ISP UART RX' },
+  { v: 48, name: 'I2C slave' },
 ];
-export const ISP_FUNCTIONS = FUNCTIONS.filter(f => f.v === 0 || f.v >= 32);
+export const ISP_FUNCTIONS = FUNCTIONS.filter(f => f.v === 0 || (f.v >= 32 && f.v <= 39));
 export const FUNCTION_VALUES = new Set(FUNCTIONS.map(f => f.v));
 
 export const MODE = { INPUT: 1, OUTPUT: 2, OPEN_DRAIN: 4, PULL_UP: 8, PULL_DOWN: 16, NEGATIVE: 32 };
 export const MODE_MAX = 63;
 
 // MCU IDs (spec/03_card_profile.md "MCU ID").
-export const MCU_IDS = ['attiny85', 'atmega32u4', 'rp2040', 'rp2350'];
+export const MCU_IDS = ['attiny85', 'atmega32u4', 'rp2040', 'rp2350', 'esp8266'];
 export const MCU_ID_MAX_BYTES = 16;
 // MCUs programmable per ISP method.
-export const MCU_BY_METHOD = { 1: ['attiny85', 'atmega32u4'], 16: ['rp2040', 'rp2350'] };
+export const MCU_BY_METHOD = { 1: ['attiny85', 'atmega32u4'], 2: ['esp8266'], 16: ['rp2040', 'rp2350'] };
 
 export const ISP_METHODS = [
   { v: 0, name: 'Unused' },
   { v: 1, name: 'SPI' },
+  { v: 2, name: 'UART (Espressif serial bootloader)' },
   { v: 16, name: 'USB (Mass Storage Class)' },
 ];
 export const ISP_METHOD_VALUES = new Set(ISP_METHODS.map(m => m.v));
+
+// Virtual I/O expander chip IDs (spec/03_card_profile.md "virtIoExp").
+export const VIRT_CHIPS = ['mcp23017'];
 
 export const BUTTONS = ['Left', 'Right', 'Up', 'Down', 'A', 'B', 'X', 'Y', 'START', 'SELECT', 'L bumper', 'R bumper'];
 
@@ -66,6 +77,7 @@ export const LCIO_HINTS = [
 ];
 export function lcioHint(i) {
   if (isPcaLcio(i)) { const n = i - LCIO_PCA_FIRST; return `PCA9555 P${n >> 3}_${n & 7}`; }
+  if (isVirtLcio(i)) { const n = i - LCIO_VIRT_FIRST; return `VirtIoExp GP${n < 8 ? 'A' : 'B'}${n & 7}`; }
   return LCIO_HINTS[i] ?? '';
 }
 
@@ -134,8 +146,16 @@ export function normalize(src) {
     id: s.id == null ? '' : String(s.id),
     name: s.name == null ? '' : String(s.name),
     lcio: copyUnknown(
-      Object.assign(lcio.useTfCard === true ? { useTfCard: true } : {}, { ports: normalizePorts(lcio.ports) }),
-      lcio, ['ports', 'useTfCard']),
+      Object.assign(
+        lcio.useTfCard === true ? { useTfCard: true } : {},
+        lcio.useVirtIoExp === true ? { useVirtIoExp: true } : {},
+        { ports: normalizePorts(lcio.ports) }),
+      lcio, ['ports', 'useTfCard', 'useVirtIoExp']),
+    ...(isObj(s.virtIoExp) ? {
+      virtIoExp: copyUnknown(
+        { chip: s.virtIoExp.chip == null ? '' : String(s.virtIoExp.chip), addr: toInt(s.virtIoExp.addr) },
+        s.virtIoExp, ['chip', 'addr']),
+    } : {}),
     lcdtap: (() => {
       const o = { preset: lcdtap.preset == null ? '' : String(lcdtap.preset) };
       if (isObj(lcdtap.cfg)) {
@@ -158,7 +178,7 @@ export function normalize(src) {
         .filter(isObj).map(e => ({ s: toInt(e.s), d: toInt(e.d) })).sort((a, b) => a.s - b.s),
     }, keymap, ['map']),
   };
-  copyUnknown(out, s, ['format', 'id', 'name', 'lcio', 'lcdtap', 'isp', 'keymap']);
+  copyUnknown(out, s, ['format', 'id', 'name', 'lcio', 'virtIoExp', 'lcdtap', 'isp', 'keymap']);
   return out;
 }
 
@@ -189,11 +209,13 @@ export function validate(p) {
       if ((q.m & MODE.PULL_UP) && (q.m & MODE.PULL_DOWN)) warn(`${label}: LCIO${q.i}: both pull-up and pull-down set`);
       if (dir === MODE.OPEN_DRAIN && !(q.m & MODE.NEGATIVE)) err(`${label}: LCIO${q.i}: open-drain output needs negative logic`);
       if (q.f !== 0 && dir === 0) warn(`${label}: LCIO${q.i}: function set but direction is "unused"`);
-      if (isPcaLcio(q.i)) {
-        if (dir !== 0 && dir !== MODE.OUTPUT && dir !== MODE.OPEN_DRAIN) err(`${label}: LCIO${q.i}: PCA9555 ports must be OUTPUT or open-drain`);
-        if (q.m & (MODE.PULL_UP | MODE.PULL_DOWN)) warn(`${label}: LCIO${q.i}: pull settings are ignored on PCA9555 ports`);
-        if (q.f >= 32) err(`${label}: LCIO${q.i}: RESET/BOOTSEL/ISP cannot be on a PCA9555 port`);
+      if (isPcaLcio(q.i) || isVirtLcio(q.i)) {
+        const kind = isPcaLcio(q.i) ? 'PCA9555' : 'virtual expander';
+        if (dir !== 0 && dir !== MODE.OUTPUT && dir !== MODE.OPEN_DRAIN) err(`${label}: LCIO${q.i}: ${kind} ports must be OUTPUT or open-drain`);
+        if (q.m & (MODE.PULL_UP | MODE.PULL_DOWN)) warn(`${label}: LCIO${q.i}: pull settings are ignored on ${kind} ports`);
+        if (q.f >= 32) err(`${label}: LCIO${q.i}: RESET/BOOTSEL/ISP cannot be on a ${kind} port`);
       }
+      if (q.f === 48 && q.i !== 6 && q.i !== 7) err(`${label}: LCIO${q.i}: I2C slave (48) is fixed to LCIO6/7`);
     }
   };
   checkPorts(p.lcio.ports, 'lcio', FUNCTION_VALUES);
@@ -209,6 +231,28 @@ export function validate(p) {
       if (!hasPort(p.isp.ports, f)) err(`isp: SPI ISP needs an ISP ${name} (${f}) port`);
     }
     if (!hasAny(32)) err('isp: SPI ISP needs a RESET (32) port');
+  } else if (p.isp.method === 2) {
+    for (const [f, name] of [[38, 'UART TX'], [39, 'UART RX']]) {
+      if (!hasPort(p.isp.ports, f)) err(`isp: UART ISP needs an ISP ${name} (${f}) port`);
+    }
+    if (!hasAny(32)) err('isp: UART ISP needs a RESET (32) port');
+    if (!hasAny(33)) err('isp: UART ISP needs a BOOTSEL (33) port');
+  }
+
+  {
+    const useVio = p.lcio.useVirtIoExp === true;
+    if (useVio && !p.virtIoExp) err('lcio.useVirtIoExp is set but virtIoExp is missing');
+    if (!useVio && p.virtIoExp) warn('virtIoExp is set but lcio.useVirtIoExp is not true');
+    if (p.virtIoExp) {
+      if (!VIRT_CHIPS.includes(p.virtIoExp.chip)) warn(`virtIoExp.chip "${p.virtIoExp.chip}" is not a known chip ID`);
+      if (!Number.isInteger(p.virtIoExp.addr) || p.virtIoExp.addr < 0 || p.virtIoExp.addr > 127) err('virtIoExp.addr must be 0-127');
+    }
+    if (useVio) {
+      for (const i of [6, 7]) {
+        if (!p.lcio.ports.some(q => q.i === i && q.f === 48)) err(`lcio: virtual I/O expander needs LCIO${i} with function I2C slave (48)`);
+      }
+    }
+    if (p.lcio.ports.some(q => isVirtLcio(q.i)) && !useVio) err('lcio: LCIO64-79 require lcio.useVirtIoExp');
   }
 
   if (!PRESET_NAMES.includes(p.lcdtap.preset)) err(`lcdtap.preset "${p.lcdtap.preset}" is not a LcdTap preset name`);

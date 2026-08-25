@@ -2,7 +2,7 @@
 
 import {
   DEFAULT_PROFILE, FUNCTIONS, ISP_FUNCTIONS, ISP_METHODS, MCU_IDS, BUTTONS, MODE,
-  LCIO_GPIO_LIST, LCIO_PCA_LIST, isPcaLcio, lcioHint,
+  LCIO_GPIO_LIST, LCIO_PCA_LIST, LCIO_VIRT_LIST, isPcaLcio, isVirtLcio, lcioHint,
   ID_MAX_BYTES, NAME_MAX_BYTES, utf8Len, normalize, validate, hasErrors,
 } from './profile.js';
 import { CONFIG_ENTRIES, PRESET_NAMES, effectiveConfig, isEntryEnabled } from './lcdtap_config.js';
@@ -48,7 +48,7 @@ const ui = { lcio: [], isp: [], cfg: [], keymap: [] };
 function buildPortTable(tbody, rows, functions, indices) {
   tbody.replaceChildren();
   for (const i of indices) {
-    const pca = isPcaLcio(i);
+    const pca = isPcaLcio(i) || isVirtLcio(i);  // no input role, pulls ignored
     const dirs = pca ? DIRECTIONS.filter(d => d.v !== MODE.INPUT) : DIRECTIONS;  // no input role on PCA9555
     const fn = el('select', { onchange: onUiChange }, functions.map(f => option(f.v, f.name)));
     const dir = el('select', { onchange: onUiChange }, dirs.map(d => option(d.v, d.name)));
@@ -99,8 +99,10 @@ function buildKeymapTable() {
 function buildSettings() {
   buildPortTable($('#t-lcio tbody'), ui.lcio, FUNCTIONS, LCIO_GPIO_LIST);
   buildPortTable($('#t-lcio-pca tbody'), ui.lcio, FUNCTIONS.filter(f => f.v < 32), LCIO_PCA_LIST);
+  buildPortTable($('#t-lcio-virt tbody'), ui.lcio, FUNCTIONS.filter(f => f.v === 0 || (f.v >= 16 && f.v <= 27)), LCIO_VIRT_LIST);
   buildPortTable($('#t-isp tbody'), ui.isp, ISP_FUNCTIONS, LCIO_GPIO_LIST);
   $('#f-usetf').addEventListener('change', onUiChange);
+  $('#f-usevio').addEventListener('change', onUiChange);
   $('#f-preset').append(...PRESET_NAMES.map(n => option(n, n)));
   $('#f-isp-method').append(...ISP_METHODS.map(m => option(m.v, m.name)));
   $('#f-isp-mcu').append(option('', '(not set)'), ...MCU_IDS.map(id => option(id, id)));
@@ -176,6 +178,7 @@ function renderSettings() {
     renderCounters();
     renderPorts(ui.lcio, profile.lcio.ports);
     $('#f-usetf').checked = profile.lcio.useTfCard === true;
+    $('#f-usevio').checked = profile.lcio.useVirtIoExp === true;
     const presetSel = $('#f-preset');
     presetSel.value = profile.lcdtap.preset;
     if (presetSel.value !== profile.lcdtap.preset) presetSel.value = '';  // unknown preset: show blank
@@ -224,6 +227,7 @@ function readSettings() {
   p.name = $('#f-name').value;
   p.lcio.ports = readPorts(ui.lcio);
   if ($('#f-usetf').checked) p.lcio.useTfCard = true; else delete p.lcio.useTfCard;
+  if ($('#f-usevio').checked) p.lcio.useVirtIoExp = true; else delete p.lcio.useVirtIoExp;
   const presetSel = $('#f-preset');
   if (presetSel.value !== '') p.lcdtap.preset = presetSel.value;
   const cfg = {};
