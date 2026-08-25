@@ -76,7 +76,9 @@ int main(int argc, char** argv) {
   assert(!p.useTfCard);
   assert(lcioIsValid(0) && lcioIsValid(13) && !lcioIsValid(14) && !lcioIsValid(31) &&
          lcioIsValid(32) && lcioIsValid(47) && !lcioIsValid(48));
+  assert(!lcioIsValid(63) && lcioIsValid(64) && lcioIsValid(79) && !lcioIsValid(80));
   assert(lcioIsPca(40) && !lcioIsGpio(40) && lcioIsGpio(5));
+  assert(lcioIsVirt(64) && lcioIsVirt(79) && !lcioIsVirt(48) && !lcioIsVirt(80));
 
   lcdtap::LcdTapConfig cfg;
   profileBuildLcdTapConfig(p, &cfg);
@@ -135,9 +137,68 @@ int main(int argc, char** argv) {
     assert(r.ispMethod == isp_method::USB_MSC);
     assert(profileFindIspOrLcioPort(r, func::RESET) == 13);
     assert(profileFindIspOrLcioPort(r, func::BOOTSEL) == 12);
-    assert(r.lcio[32].f == 16 && (r.lcio[32].m & mode::DIR_MASK) == mode::OUTPUT);
+    // Keys on the card PCA9555 are open-drain active-low in the current profiles.
+    assert(r.lcio[32].f == 16 && (r.lcio[32].m & mode::DIR_MASK) == mode::OPEN_DRAIN);
     profileBuildLcdTapConfig(r, &cfg);
     assert(cfg.busInterface == lcdtap::BusType::SPI_4LINE);
+  }
+
+  // An ESPboy-style frame (optional third argument): UART ISP + virtual
+  // I/O expander (spec/03 additions).
+  if (argc > 3) {
+    std::vector<uint8_t> eb = loadHex(argv[3]);
+    CardProfile r;
+    ProfileError ee = profileParseFrame(eb.data(), eb.size(), &r, &n);
+    printf("espboy parse: %s (cbor %u bytes) id=%s vio=%d isp=%u\n", profileErrorText(ee), n, r.id,
+           r.useVirtIoExp, r.ispMethod);
+    assert(ee == ProfileError::OK);
+    assert(strcmp(r.id, "ESPboy") == 0);
+    assert(r.useVirtIoExp && !r.useTfCard);
+    assert(strcmp(r.virtIoExpChip, "mcp23017") == 0 && r.virtIoExpAddr == 32);
+    assert(r.lcio[6].f == func::I2C_SLAVE && r.lcio[7].f == func::I2C_SLAVE);
+    assert(r.lcio[64].f == 16 && r.lcio[64].m == 36);  // GPA0 = LEFT
+    assert(r.lcio[65].f == 18 && r.lcio[67].f == 17);  // GPA1 = UP, GPA3 = RIGHT
+    assert(r.lcio[70].f == 26 && r.lcio[71].f == 27);  // GPA6/7 = L/R bumper
+    assert(r.lcio[72].f == 0 && r.lcio[72].m == 0);    // GPB0 unassigned
+    assert(r.ispMethod == isp_method::UART_ESP);
+    assert(strcmp(r.ispMcu, "esp8266") == 0);
+    assert(r.isp[10].f == func::ISP_UART_TX && r.isp[10].m == 2);
+    assert(r.isp[11].f == func::ISP_UART_RX && r.isp[11].m == 9);
+    assert(profileFindIspOrLcioPort(r, func::RESET) == 13);
+    assert(profileFindIspOrLcioPort(r, func::BOOTSEL) == 12);
+    assert(r.keymap[10] == 10 && r.keymap[6] == 0xFF);
+    assert(r.lcdtapPresetId == lcdtap::ConfigPreset::ESPBOY);
+    profileBuildLcdTapConfig(r, &cfg);
+    assert(cfg.busInterface == lcdtap::BusType::SPI_4LINE);
+    assert(cfg.buffWidth == 136 && cfg.buffHeight == 136);
+    assert(cfg.trimWidth == 128 && cfg.trimHeight == 128);
+
+    // useVirtIoExp true (0xF5) -> false (0xF4): virtual ports without the
+    // flag must be rejected.
+    std::vector<uint8_t> novio = eb;
+    {
+      const uint8_t pat[] = {0x6C, 'u', 's', 'e', 'V', 'i', 'r', 't', 'I', 'o', 'E', 'x', 'p', 0xF5};
+      bool done = false;
+      for (size_t i = 4; i + sizeof(pat) <= novio.size() && !done; ++i) {
+        if (memcmp(&novio[i], pat, sizeof(pat)) == 0) { novio[i + sizeof(pat) - 1] = 0xF4; done = true; }
+      }
+      assert(done);
+      patchCrc(novio);
+      assert(profileParseFrame(novio.data(), novio.size(), &r, &n) == ProfileError::BAD_PORT);
+    }
+
+    // isp port f:38 (0x18 0x26) -> f:0: the UART TX requirement must trip.
+    std::vector<uint8_t> notx = eb;
+    {
+      const uint8_t pat[] = {0x61, 'f', 0x18, 0x26};
+      bool done = false;
+      for (size_t i = 4; i + sizeof(pat) <= notx.size() && !done; ++i) {
+        if (memcmp(&notx[i], pat, sizeof(pat)) == 0) { notx[i + 3] = 0x00; done = true; }
+      }
+      assert(done);
+      patchCrc(notx);
+      assert(profileParseFrame(notx.data(), notx.size(), &r, &n) == ProfileError::MISSING_PORT);
+    }
   }
 
   printf("ok\n");

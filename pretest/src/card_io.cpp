@@ -9,6 +9,7 @@
 
 #include "aux_i2c.hpp"
 #include "board_pins.hpp"
+#include "virt_ioexp.hpp"
 
 namespace wcb {
 
@@ -87,6 +88,13 @@ static void setupLine(int i, const PortCfg& cfg) {
     return;
   }
 
+  if (lcioIsVirt(i)) {
+    // Virtual expander pins: no GPIO behind them; key state is pushed into
+    // the emulated MCP23017 pad image (virt_ioexp) by driveLine().
+    if (dir == mode::OUTPUT || dir == mode::OPEN_DRAIN) l.configured = true;
+    return;
+  }
+
   uint pin = pinOf(i);
   gpio_init(pin);
   if (cfg.m & mode::PULL_UP) {
@@ -128,6 +136,11 @@ static void driveLine(int i, bool assert) {
       if (high) sPcaOut |= bit; else sPcaOut &= static_cast<uint16_t>(~bit);
       sPcaOutDirty = true;
     }
+    l.asserted = assert;
+    return;
+  }
+  if (lcioIsVirt(i)) {
+    vioSetPin(i - LCIO_VIRT_FIRST, assert);
     l.asserted = assert;
     return;
   }
@@ -229,12 +242,30 @@ void cardBootselRelease() { if (sBootselIdx >= 0) driveLine(sBootselIdx, false);
 IspMode cardIspMode() {
   if (sIspMethod == isp_method::SPI) return IspMode::SPI;
   if (sIspMethod == isp_method::USB_MSC) return IspMode::USB;
+  if (sIspMethod == isp_method::UART_ESP) return IspMode::UART;
   return IspMode::NONE;
 }
 
 const char* cardIspMcu() { return sIspMcu; }
 
 bool cardUseTfCard() { return sUseTfCard; }
+
+bool cardIspUartPins(unsigned* txPin, unsigned* rxPin) {
+  if (sIspMethod != isp_method::UART_ESP) return false;
+  int tx = profileFindPort(sIsp, func::ISP_UART_TX);
+  int rx = profileFindPort(sIsp, func::ISP_UART_RX);
+  if (tx < 0 || rx < 0 || !lcioIsGpio(tx) || !lcioIsGpio(rx)) return false;
+  if (sResetIdx < 0 || sBootselIdx < 0) return false;
+  // Hardware UART only: GPIO10 (UART1 TX) / GPIO11 (UART1 RX) via the
+  // RP2350 UART_AUX function. Other pins would need a PIO UART.
+  if (tx != 10 || rx != 11) {
+    printf("[card_io] UART ISP is supported on LCIO10 (TX) / LCIO11 (RX) only\n");
+    return false;
+  }
+  *txPin = pinOf(tx);
+  *rxPin = pinOf(rx);
+  return true;
+}
 
 bool cardIspPins(IspPins* out) {
   if (sIspMethod != isp_method::SPI) return false;

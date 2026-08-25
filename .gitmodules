@@ -7,3 +7,6 @@
 [submodule "submodule/Pico-PIO-USB"]
 	path = submodule/Pico-PIO-USB
 	url = https://github.com/sekigon-gonnoc/Pico-PIO-USB.git
+[submodule "submodule/esp-serial-flasher"]
+	path = submodule/esp-serial-flasher
+	url = https://github.com/espressif/esp-serial-flasher

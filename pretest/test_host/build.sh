@@ -13,4 +13,8 @@ done
 g++ -std=c++17 -O1 -Wall -Wextra $DEFS -I../src -I$QCBOR/inc -I$LCDTAP/include \
   profile_test.cpp ../src/card_profile.cpp ../src/crc32.cpp $LCDTAP/src/config.cpp \
   build/*.o -o build/profile_test
-./build/profile_test "$@"
+if [ $# -gt 0 ]; then
+  ./build/profile_test "$@"
+else
+  ./build/profile_test ../../cards/TJP/profile.hex ../../cards/PP1/profile.hex ../../cards/ESPboy/profile.hex
+fi

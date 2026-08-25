@@ -32,6 +32,12 @@ set(QCBOR_DISABLE_TAGS ON CACHE BOOL "" FORCE)
 set(QCBOR_DISABLE_INDEFINITE_LENGTH_STRINGS ON CACHE BOOL "" FORCE)
 add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../submodule/QCBOR qcbor)
 
+# esp-serial-flasher (UART ISP, isp.method = 2, ESP8266 cards). The port is
+# ours (src/isp_esp.cpp: uart1 on LCIO10/11 + card_io RESET/BOOTSEL), so the
+# library is built without any bundled port.
+set(PORT "USER_DEFINED")
+add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../submodule/esp-serial-flasher esp_flasher)
+
 add_executable(pretest
     src/main.cpp
     src/ili9488.cpp
@@ -39,6 +45,7 @@ add_executable(pretest
     src/text_draw.cpp
     src/aux_i2c.cpp
     src/card_io.cpp
+    src/virt_ioexp.cpp
     src/crc32.cpp
     src/card_profile.cpp
     src/card_eeprom.cpp
@@ -47,6 +54,7 @@ add_executable(pretest
     src/lcdtap_input.cpp
     src/usb_host.cpp
     src/isp_usb.cpp
+    src/isp_esp.cpp
     src/sd_spi.cpp
     src/diskio.cpp
     src/isp_tiny85.cpp
@@ -74,6 +82,7 @@ target_link_libraries(pretest
     lcdtap
     fatfs
     qcbor
+    flasher
     hardware_pio
     hardware_spi
     hardware_dma

@@ -13,15 +13,19 @@ namespace wcb {
 static constexpr uint32_t PROFILE_CBOR_MAX = 4096;
 static constexpr uint32_t PROFILE_FRAME_MAX = 4 + PROFILE_CBOR_MAX + 4;
 // LCIO numbering: 0..13 are GPIOs on the bus, 32..47 are the card-side
-// PCA9555 ports (P0_0..P1_7, via LCAUX I2C). 14..31 are unused.
-static constexpr int NUM_LCIO = 48;
+// PCA9555 ports (P0_0..P1_7, via LCAUX I2C), 64..79 are the virtual I/O
+// expander ports (GPA0..GPB7, host-emulated on LCIO6/7). Others are unused.
+static constexpr int NUM_LCIO = 80;
 static constexpr int LCIO_GPIO_COUNT = 14;
 static constexpr int LCIO_PCA_FIRST = 32;
 static constexpr int LCIO_PCA_COUNT = 16;
+static constexpr int LCIO_VIRT_FIRST = 64;
+static constexpr int LCIO_VIRT_COUNT = 16;
 
 static constexpr bool lcioIsGpio(int i) { return i >= 0 && i < LCIO_GPIO_COUNT; }
 static constexpr bool lcioIsPca(int i) { return i >= LCIO_PCA_FIRST && i < LCIO_PCA_FIRST + LCIO_PCA_COUNT; }
-static constexpr bool lcioIsValid(int i) { return lcioIsGpio(i) || lcioIsPca(i); }
+static constexpr bool lcioIsVirt(int i) { return i >= LCIO_VIRT_FIRST && i < LCIO_VIRT_FIRST + LCIO_VIRT_COUNT; }
+static constexpr bool lcioIsValid(int i) { return lcioIsGpio(i) || lcioIsPca(i) || lcioIsVirt(i); }
 static constexpr int NUM_BUTTONS = 12;
 static constexpr int ID_MAX = 16;
 static constexpr int NAME_MAX = 64;
@@ -39,6 +43,9 @@ static constexpr uint8_t ISP_CS = 34;
 static constexpr uint8_t ISP_SCK = 35;
 static constexpr uint8_t ISP_MOSI = 36;
 static constexpr uint8_t ISP_MISO = 37;
+static constexpr uint8_t ISP_UART_TX = 38;
+static constexpr uint8_t ISP_UART_RX = 39;
+static constexpr uint8_t I2C_SLAVE = 48;  // virtual I/O expander bus (LCIO6/7 only)
 }  // namespace func
 
 // Port mode bits.
@@ -55,6 +62,7 @@ static constexpr uint8_t DIR_MASK = INPUT | OUTPUT | OPEN_DRAIN;
 namespace isp_method {
 static constexpr uint8_t UNUSED = 0;
 static constexpr uint8_t SPI = 1;
+static constexpr uint8_t UART_ESP = 2;  // Espressif serial bootloader
 static constexpr uint8_t USB_MSC = 16;
 }  // namespace isp_method
 
@@ -81,6 +89,9 @@ struct CardProfile {
   char name[NAME_MAX + 1];
   PortCfg lcio[NUM_LCIO];
   bool useTfCard;  // card owns the TF card while running (LCTF_ENAX low)
+  bool useVirtIoExp;       // host emulates an I/O expander on LCIO6/7 (i2c1 slave)
+  char virtIoExpChip[17];  // virtIoExp.chip ("mcp23017"); empty = member absent
+  uint8_t virtIoExpAddr;   // virtIoExp.addr (I2C slave address)
   char lcdtapPreset[32];
   lcdtap::ConfigPreset lcdtapPresetId;
   struct CfgOverride {
@@ -110,6 +121,7 @@ enum class ProfileError : uint8_t {
   UNSUPPORTED_LCD_BUS,  // effective LcdTap bus is not I2C / 4-line SPI (pretest limitation)
   MISSING_PORT,      // a required port (e.g. RESET/BOOTSEL for USB ISP) is absent
   BAD_KEYMAP,
+  BAD_VIRT_IO_EXP,   // virtIoExp missing / unsupported chip / bad addr / non-SPI LCD
 };
 
 const char* profileErrorText(ProfileError e);

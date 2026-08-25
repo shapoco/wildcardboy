@@ -27,6 +27,7 @@ const char* profileErrorText(ProfileError e) {
     case ProfileError::UNSUPPORTED_LCD_BUS: return "unsupported LCD bus";
     case ProfileError::MISSING_PORT: return "missing port";
     case ProfileError::BAD_KEYMAP: return "bad keymap";
+    case ProfileError::BAD_VIRT_IO_EXP: return "bad virtIoExp";
   }
   return "?";
 }
@@ -113,7 +114,7 @@ static ProfileError decodePorts(QCBORDecodeContext* ctx, const char* label,
 static bool knownFunction(uint8_t f) {
   return f == func::UNUSED || f == func::LCD || f == func::TF ||
          (f >= func::BTN_FIRST && f <= func::BTN_LAST) ||
-         (f >= func::RESET && f <= func::ISP_MISO);
+         (f >= func::RESET && f <= func::ISP_UART_RX) || f == func::I2C_SLAVE;
 }
 
 static ProfileError checkPorts(const PortCfg* ports, const char* what, bool ispTable) {
@@ -124,8 +125,12 @@ static ProfileError checkPorts(const PortCfg* ports, const char* what, bool ispT
       printf("[profile] %s: LCIO%d: unknown function %u\n", what, i, p.f);
       return ProfileError::BAD_PORT;
     }
-    if (ispTable && p.f != 0 && p.f < func::RESET) {
+    if (ispTable && p.f != 0 && (p.f < func::RESET || p.f > func::ISP_UART_RX)) {
       printf("[profile] %s: LCIO%d: function %u is not an ISP function\n", what, i, p.f);
+      return ProfileError::BAD_PORT;
+    }
+    if (p.f == func::I2C_SLAVE && i != 6 && i != 7) {
+      printf("[profile] %s: LCIO%d: I2C slave (48) is fixed to LCIO6/7\n", what, i);
       return ProfileError::BAD_PORT;
     }
     uint8_t dir = p.m & mode::DIR_MASK;
@@ -141,22 +146,24 @@ static ProfileError checkPorts(const PortCfg* ports, const char* what, bool ispT
       printf("[profile] %s: LCIO%d: open-drain output needs negative logic\n", what, i);
       return ProfileError::BAD_PORT_MODE;
     }
-    if (lcioIsPca(i)) {
-      // PCA9555 ports: push-pull or open-drain (direction switching) outputs;
-      // pulls are fixed by the chip.
+    if (lcioIsPca(i) || lcioIsVirt(i)) {
+      // PCA9555 / virtual expander ports: push-pull or open-drain (direction
+      // switching) outputs; pulls are fixed by the (emulated) chip.
+      const char* kind = lcioIsPca(i) ? "PCA9555" : "virtual expander";
       if (dir != mode::OUTPUT && dir != mode::OPEN_DRAIN) {
-        printf("[profile] %s: LCIO%d: PCA9555 ports must be OUTPUT or OPEN_DRAIN\n", what, i);
+        printf("[profile] %s: LCIO%d: %s ports must be OUTPUT or OPEN_DRAIN\n", what, i, kind);
         return ProfileError::BAD_PORT_MODE;
       }
       if (p.f >= func::RESET) {
-        printf("[profile] %s: LCIO%d: RESET/BOOTSEL/ISP cannot be on a PCA9555 port\n", what, i);
+        printf("[profile] %s: LCIO%d: RESET/BOOTSEL/ISP cannot be on a %s port\n", what, i, kind);
         return ProfileError::BAD_PORT;
       }
     }
     if (p.f == func::TF) printf("[profile] warning: %s: LCIO%d: TF card I/F is not supported by pretest\n", what, i);
-    if (p.f == func::BOOTSEL) printf("[profile] warning: %s: LCIO%d: BOOTSEL is not used by pretest\n", what, i);
-    if (p.f == func::LCD && i != 2 && i != 3) {
-      printf("[profile] warning: %s: LCIO%d: LCD I/F outside the I2C pair (LCIO2/3)\n", what, i);
+    // LCD pins: I2C = LCIO2/3, SPI = LCIO0-4 (fixed maps in spec/02); anything
+    // beyond that is the unsupported parallel bus.
+    if (p.f == func::LCD && i > 4) {
+      printf("[profile] warning: %s: LCIO%d: LCD I/F outside the I2C/SPI pin range (LCIO0-4)\n", what, i);
     }
   }
   return ProfileError::OK;
@@ -198,6 +205,27 @@ static ProfileError decodeCbor(const uint8_t* cbor, uint32_t len, CardProfile* o
     QCBORDecode_GetBoolInMapSZ(&ctx, "useTfCard", &useTf);
     if (optional(&ctx)) out->useTfCard = useTf;
     else if (QCBORDecode_GetError(&ctx) != QCBOR_SUCCESS) return ProfileError::CBOR_ERROR;
+    bool useVio = false;
+    QCBORDecode_GetBoolInMapSZ(&ctx, "useVirtIoExp", &useVio);
+    if (optional(&ctx)) out->useVirtIoExp = useVio;
+    else if (QCBORDecode_GetError(&ctx) != QCBOR_SUCCESS) return ProfileError::CBOR_ERROR;
+    QCBORDecode_ExitMap(&ctx);
+  }
+
+  // virtIoExp.chip / virtIoExp.addr
+  QCBORDecode_EnterMapFromMapSZ(&ctx, "virtIoExp");
+  if (optional(&ctx)) {
+    QCBORDecode_GetTextStringInMapSZ(&ctx, "chip", &s);
+    if (optional(&ctx)) {
+      if (!copyText(s, out->virtIoExpChip, sizeof(out->virtIoExpChip) - 1)) {
+        return ProfileError::BAD_VIRT_IO_EXP;
+      }
+    } else if (QCBORDecode_GetError(&ctx) != QCBOR_SUCCESS) {
+      return ProfileError::CBOR_ERROR;
+    }
+    int64_t addr = getIntOr(&ctx, "addr", 0);
+    if (addr < 0 || addr > 127) return ProfileError::BAD_VIRT_IO_EXP;
+    out->virtIoExpAddr = static_cast<uint8_t>(addr);
     QCBORDecode_ExitMap(&ctx);
   }
 
@@ -318,6 +346,35 @@ static ProfileError checkProfile(CardProfile* p) {
     return ProfileError::UNSUPPORTED_LCD_BUS;
   }
 
+  // Virtual I/O expander (spec/02 "キーパッド I/F が仮想 I/O エキスパンダの場合").
+  bool virtPortSeen = false;
+  for (int i = LCIO_VIRT_FIRST; i < LCIO_VIRT_FIRST + LCIO_VIRT_COUNT; ++i) {
+    if (p->lcio[i].f != 0 || p->lcio[i].m != 0) { virtPortSeen = true; break; }
+  }
+  if (p->useVirtIoExp) {
+    if (strcmp(p->virtIoExpChip, "mcp23017") != 0) {
+      // The web editor only warns on an unknown chip; pretest cannot emulate
+      // one, so this is a hard error here.
+      printf("[profile] virtIoExp.chip \"%s\" is not supported (mcp23017 only)\n", p->virtIoExpChip);
+      return ProfileError::BAD_VIRT_IO_EXP;
+    }
+    if (p->virtIoExpAddr == 0) {
+      printf("[profile] virtIoExp.addr is missing or 0\n");
+      return ProfileError::BAD_VIRT_IO_EXP;
+    }
+    if (p->lcio[6].f != func::I2C_SLAVE || p->lcio[7].f != func::I2C_SLAVE) {
+      printf("[profile] virtual I/O expander needs LCIO6 and LCIO7 with function 48\n");
+      return ProfileError::MISSING_PORT;
+    }
+    if (cfg.busInterface != lcdtap::BusType::SPI_4LINE) {
+      printf("[profile] virtual I/O expander requires an SPI LCD (i2c1 is shared)\n");
+      return ProfileError::BAD_VIRT_IO_EXP;
+    }
+  } else if (virtPortSeen) {
+    printf("[profile] lcio: LCIO64-79 require lcio.useVirtIoExp\n");
+    return ProfileError::BAD_PORT;
+  }
+
   if (p->ispMethod == isp_method::SPI && !avrDeviceById(p->ispMcu)) {
     printf("[profile] warning: unknown SPI ISP MCU \"%s\" (ATtiny85 assumed unusable)\n", p->ispMcu);
   }
@@ -332,6 +389,21 @@ static ProfileError checkProfile(CardProfile* p) {
         profileFindPort(p->isp, func::ISP_MISO) < 0 || profileFindIspOrLcioPort(*p, func::RESET) < 0) {
       printf("[profile] SPI ISP needs MOSI/SCK/MISO and RESET ports\n");
       return ProfileError::MISSING_PORT;
+    }
+  } else if (p->ispMethod == isp_method::UART_ESP) {
+    int tx = profileFindPort(p->isp, func::ISP_UART_TX);
+    int rx = profileFindPort(p->isp, func::ISP_UART_RX);
+    if (tx < 0 || rx < 0 || profileFindIspOrLcioPort(*p, func::RESET) < 0 ||
+        profileFindIspOrLcioPort(*p, func::BOOTSEL) < 0) {
+      printf("[profile] UART ISP needs UART TX/RX, RESET and BOOTSEL ports\n");
+      return ProfileError::MISSING_PORT;
+    }
+    if (!lcioIsGpio(tx) || !lcioIsGpio(rx)) {  // defensive; checkPorts already rejects f>=32 off-GPIO
+      printf("[profile] UART ISP TX/RX must be GPIO LCIOs\n");
+      return ProfileError::BAD_PORT;
+    }
+    if (p->ispMcu[0] != '\0' && strcmp(p->ispMcu, "esp8266") != 0) {
+      printf("[profile] warning: isp.mcu \"%s\" does not match the UART ISP (esp8266 expected)\n", p->ispMcu);
     }
   } else if (p->ispMethod != isp_method::UNUSED) {
     printf("[profile] warning: unknown ISP method %u\n", p->ispMethod);

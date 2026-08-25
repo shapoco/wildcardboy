@@ -1,4 +1,4 @@
-// WildCardBoy pretest firmware: logic card bring-up (TJP / PP1 / PP2).
+// WildCardBoy pretest firmware: logic card bring-up (TJP / PP1 / PP2 / ESPboy).
 //
 //   Detect : the card's profile EEPROM must ACK 3 times (200 ms apart), then
 //            the profile is read and validated (length / CRC32 / CBOR).
@@ -6,11 +6,14 @@
 //            card auto-starts only when it was present at boot).
 //   Running: RESET released; LcdTap captures the card's LCD stream on core 1
 //            (I2C or 4-line SPI) and core 0 pushes the changed lines to the
-//            host LCD; host keys go to the card's key lines (GPIO or the
-//            card PCA9555); with useTfCard the TF card is handed to the card.
+//            host LCD; host keys go to the card's key lines (GPIO, the card
+//            PCA9555, or the virtual MCP23017 emulated on i2c1 when the
+//            profile sets useVirtIoExp); with useTfCard the TF card is
+//            handed to the card.
 //   HOME opens the system menu: Start/Stop card, Apps (program the card MCU
-//   from the TF card: ATtiny ISP over SPI or UF2 over USB MSC), Profile
-//   (write a profile .hex into the card EEPROM and re-detect the card).
+//   from the TF card: AVR ISP over SPI, UF2 over USB MSC, or the Espressif
+//   serial bootloader over UART), Profile (write a profile .hex into the
+//   card EEPROM and re-detect the card).
 //
 // Debug output: USB CDC. See ../spec/ for the pin map.
 
@@ -33,6 +36,7 @@
 #include "core1.hpp"
 #include "ili9488.hpp"
 #include "isp_tiny85.hpp"
+#include "isp_esp.hpp"
 #include "isp_usb.hpp"
 #include "lcd_pump.hpp"
 #include "lcdtap_input.hpp"
@@ -40,6 +44,7 @@
 #include "sys_clock.hpp"
 #include "text_draw.hpp"
 #include "ui_menu.hpp"
+#include "virt_ioexp.hpp"
 
 using namespace wcb;
 
@@ -138,6 +143,9 @@ static bool cardStart() {
          lcdtap::BUS_NAMES[static_cast<int>(cfg.busInterface)], cfg.i2cSlaveAddr,
          cfg.buffWidth, cfg.buffHeight);
 
+  // Virtual I/O expander: slave up, registers at POR, before the MCU runs.
+  if (gProfile.useVirtIoExp) vioInit(gProfile.virtIoExpAddr);
+
   // Release the MCU; mirror the reset into LcdTap.
   core1Call(Core1Cmd::LCDTAP_RESET_ASSERT);
   cardKeysRelease();
@@ -152,6 +160,7 @@ static void cardStop() {
   if (gCardState != CardState::RUNNING) return;
   cardResetAssert();
   cardKeysRelease();
+  if (gProfile.useVirtIoExp) vioDeinit();
   core1Call(Core1Cmd::LCDTAP_DETACH);
   delete gTap;
   gTap = nullptr;
@@ -285,14 +294,20 @@ static const char* programAppSpi(const char* path) {
 
 static const char* hookProgramApp(const char* path, void*) {
   if (gCardState != CardState::RUNNING && gCardState != CardState::STOPPED) return "No Logic Card";
+  // Dispatch on the card's ISP method (the extension alone is ambiguous:
+  // .bin is both the AVR raw image and the ESP8266 flash image).
   const bool uf2 = hasExt(path, ".uf2");
   const IspMode mode = cardIspMode();
+  if (mode == IspMode::NONE) return "Card has no ISP";
   if (uf2 && mode != IspMode::USB) return "Card has no USB ISP";
-  if (!uf2 && mode != IspMode::SPI) return uf2 ? "Card has no USB ISP" : "Card has no SPI ISP";
+  if (!uf2 && mode == IspMode::USB) return "Not a UF2 file";
 
   if (gCardState == CardState::RUNNING) cardStop();  // programming needs the card quiet
-  if (uf2) return ispUsbProgram(path, ispUsbProgress, nullptr);
-  return programAppSpi(path);
+  switch (mode) {
+    case IspMode::USB: return ispUsbProgram(path, ispUsbProgress, nullptr);
+    case IspMode::UART: return ispEspProgram(path, ispUsbProgress, nullptr);
+    default: return programAppSpi(path);
+  }
 }
 
 static const char* hookValidateProfile(const char* path, char* id, size_t idCap,
@@ -381,6 +396,14 @@ static void printStats(uint16_t keys, bool keysOk, uint32_t loopsPerSec) {
            static_cast<unsigned long>(gPump.linesSent()),
            static_cast<unsigned long>(gPump.fullRepaints()),
            static_cast<unsigned long>(gPump.dirtyGroups()));
+  }
+  if (gCardState == CardState::RUNNING && gProfile.useVirtIoExp) {
+    const VioStats& v = vioStats();
+    printf(" | vio w=%lu r=%lu abrt=%lu reg=0x%02x%s",
+           static_cast<unsigned long>(v.writeBytes),
+           static_cast<unsigned long>(v.readBytes),
+           static_cast<unsigned long>(v.aborts), v.lastReg,
+           v.bankWarn ? " BANK!" : "");
   }
   printf("\n");
 }

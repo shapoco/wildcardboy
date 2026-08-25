@@ -14,7 +14,7 @@
 
 namespace wcb {
 
-enum class IspMode : uint8_t { NONE, SPI, USB };
+enum class IspMode : uint8_t { NONE, SPI, USB, UART };
 
 // Configure the GPIOs / PCA9555 for every port in the profile (LCD I/F pins
 // are left to the LcdTap capture). All asserted lines start released.
@@ -42,5 +42,9 @@ bool cardUseTfCard();
 
 // SPI ISP pins from the profile's isp table; false if not available.
 bool cardIspPins(IspPins* out);
+
+// UART ISP pins (functions 38/39). pretest supports only LCIO10/11, where
+// uart1 TX/RX is available via FUNCSEL UART_AUX. False if not usable.
+bool cardIspUartPins(unsigned* txPin, unsigned* rxPin);
 
 }  // namespace wcb

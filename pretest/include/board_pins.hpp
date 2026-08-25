@@ -75,6 +75,10 @@ static constexpr uint16_t HKEY_HOME = 1u << 12;
 static constexpr uint PIN_LCIO_BASE = 0;
 static constexpr uint PIN_LC_LCD_SDA = 2;  // LCIO2 (I2C1 SDA)
 static constexpr uint PIN_LC_LCD_SCL = 3;  // LCIO3 (I2C1 SCL)
+// Virtual I/O expander bus (spec/02): the host is an i2c1 *slave* here.
+// Mutually exclusive with the I2C LCD capture above (same controller).
+static constexpr uint PIN_LCVIO_SDA = 6;  // LCIO6 (I2C1 SDA)
+static constexpr uint PIN_LCVIO_SCL = 7;  // LCIO7 (I2C1 SCL)
 
 // Logic card USB (PIO-USB host). DM must be DP + 1.
 static constexpr uint PIN_LCUSB_DP = 30;

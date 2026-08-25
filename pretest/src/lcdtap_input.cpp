@@ -128,6 +128,12 @@ bool lcdtapInputAttached() { return sAttached; }
 
 void lcdtapInputSetReset(bool assert) {
   if (sTap) sTap->inputReset(assert);
+  // Cards with CS tied low and no RST wire (ESPboy) never fire the GPIO
+  // resync IRQs above; the host-driven card reset is the byte-framing
+  // resync point instead. Harmless for cards that do have CS/RST edges.
+  if (sAttached && sBus == lcdtap::BusType::SPI_4LINE) {
+    lcdtap::pico2::spiSlaveResetSm(&sSpi);
+  }
 }
 
 const LcdtapInputStats& lcdtapInputStats() {
