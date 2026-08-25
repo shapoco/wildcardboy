@@ -106,7 +106,7 @@ const PRESET_DEFS = {
   'ST7735': [F.ST7789, { buffWidth: 128, buffHeight: 160 }],
   'ST7789': [F.ST7789, {}],
   'Arduboy': [F.SSD1306, { busInterface: B.SPI4 }],
-  'ESPboy': [F.ST7789, { buffWidth: 136, buffHeight: 136, trimMode: 2, trimX: 6, trimY: 5, trimWidth: 128, trimHeight: 128, outputRot: 2 }],
+  'ESPboy': [F.ST7789, { inverted: 0, swapRB: 1, buffWidth: 136, buffHeight: 136, trimMode: 2, trimX: 6, trimY: 5, trimWidth: 128, trimHeight: 128, outputRot: 2 }],
   'M5Stack CoreS3': [F.ILI9341, { buffWidth: 320, buffHeight: 240 }],
   'PicoCalc': [F.ST7789, { buffWidth: 320, buffHeight: 320, outputRot: 0, flipMode: 1, swapRB: 1 }],
   'PicoPad': [F.ST7789, { outputRot: 3 }],
