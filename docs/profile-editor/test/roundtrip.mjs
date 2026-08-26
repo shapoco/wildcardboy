@@ -63,8 +63,8 @@ assert.throws(() => encode({ x: null }));
 }
 assert.deepEqual(decode(new Uint8Array([0x9F, 0x01, 0x02, 0xFF])).value, [1, 2]); // indefinite array
 
-// Profile round trip: cards/TJP/profile.json -> CBOR -> frame -> HEX -> back
-const src = JSON.parse(readFileSync(join(here, '../../../cards/TJP/profile.json'), 'utf8'));
+// Profile round trip: cards/TinyJoyPad/profile.json -> CBOR -> frame -> HEX -> back
+const src = JSON.parse(readFileSync(join(here, '../../../cards/TinyJoyPad/profile.json'), 'utf8'));
 const prof = normalize(src);
 assert.deepEqual(validate(prof).filter(m => m.level === 'error'), []);
 const { bytes, cbor, crc } = build(prof);
@@ -76,7 +76,7 @@ assert.deepEqual([...back], [...bytes]);
 const parsed = parse(back);
 assert.equal(parsed.crc, crc);
 assert.deepEqual(normalize(parsed.profile), prof);
-assert.deepEqual(normalize(DEFAULT_PROFILE), prof, 'built-in default must equal cards/TJP/profile.json');
+assert.deepEqual(normalize(DEFAULT_PROFILE), prof, 'built-in default must equal cards/TinyJoyPad/profile.json');
 
 // Corruption is detected
 const bad = bytes.slice(); bad[10] ^= 0x01;

@@ -1,7 +1,7 @@
 {
   "format": "WCBCARD",
-  "id": "PP1",
-  "name": "PicoPad1",
+  "id": "PicoPad2",
+  "name": "PicoPad2",
   "lcio": {
     "useTfCard": true,
     "ports": [
@@ -106,7 +106,7 @@
     "preset": "PicoPad"
   },
   "isp": {
-    "mcu": "rp2040",
+    "mcu": "rp2350",
     "method": 16,
     "ports": [
       {

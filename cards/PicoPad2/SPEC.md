@@ -1,0 +1,1 @@
+PicoPad1 の SPEC.md を参照

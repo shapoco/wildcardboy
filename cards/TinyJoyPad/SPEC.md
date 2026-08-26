@@ -1,10 +1,10 @@
-# TJP カード
+# TinyJoyPad カード
 
-TJP カードは、ATtiny85 を搭載した小型ゲーム機「Tinyjoypad」の CPU 周辺回路を WildCardBoy のロジックカードとして実装したもの。
+TinyJoyPad カードは、ATtiny85 を搭載した小型ゲーム機「Tinyjoypad」の CPU 周辺回路を WildCardBoy のロジックカードとして実装したもの。
 
 ## カードID
 
-`TJP`
+`TinyJoyPad`
 
 ## カード I/F
 
@@ -52,7 +52,7 @@ LCIO8 (LCKEY_D) --- 88kOhm ---+
 
 ## EEPROM
 
-[cards/TJP/profile.json](../cards/TJP/profile.json) を参照 (生成済みイメージ: [cards/TJP/profile.hex](../cards/TJP/profile.hex))。
+[profile.json](profile.json) を参照 (生成済みイメージ: [profile.hex](profile.hex))。
 
 ## プログラミング
 

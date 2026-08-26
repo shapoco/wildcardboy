@@ -83,7 +83,7 @@ export function lcioHint(i) {
 
 export const DEFAULT_PROFILE = {
   format: FORMAT,
-  id: 'TJP',
+  id: 'TinyJoyPad',
   name: 'Tinyjoypad',
   lcio: {
     ports: [
@@ -94,6 +94,7 @@ export const DEFAULT_PROFILE = {
   },
   lcdtap: { preset: 'Tinyjoypad' },
   isp: {
+    mcu: 'attiny85',
     method: 1,
     ports: [
       { i: 2, f: 36, m: 2 }, { i: 3, f: 35, m: 2 }, { i: 9, f: 37, m: 1 }, { i: 13, f: 32, m: 36 },

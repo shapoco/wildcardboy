@@ -1,10 +1,10 @@
-# PP1/PP2 カード
+# PicoPad1/PicoPad2 カード
 
-PP1/PP2 カードは、Raspberry Pi Pico / Pico 2 を搭載した小型ゲーム機「PicoPad」および「PicoPad2」の CPU 周辺回路を WildCardBoy のロジックカードとして実装したもの。
+PicoPad1/PicoPad2 カードは、Raspberry Pi Pico / Pico 2 を搭載した小型ゲーム機「PicoPad」および「PicoPad2」の CPU 周辺回路を WildCardBoy のロジックカードとして実装したもの。
 
 ## カードID
 
-`PP1` または `PP2`
+`PicoPad1` または `PicoPad2`
 
 ## カード I/F
 

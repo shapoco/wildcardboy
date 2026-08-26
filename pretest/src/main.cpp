@@ -1,4 +1,4 @@
-// WildCardBoy pretest firmware: logic card bring-up (TJP / PP1 / PP2 / ESPboy).
+// WildCardBoy pretest firmware: logic card bring-up (TinyJoyPad / PicoPad1 / PicoPad2 / ESPboy).
 //
 //   Detect : the card's profile EEPROM must ACK 3 times (200 ms apart), then
 //            the profile is read and validated (length / CRC32 / CBOR).
