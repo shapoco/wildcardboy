@@ -8,7 +8,8 @@ export const ID_MAX_BYTES = 16;
 export const NAME_MAX_BYTES = 64;
 // LCIO numbering: 0..13 = bus GPIOs, 32..47 = card-side PCA9555 ports
 // (P0_0..P1_7 via LCAUX I2C), 64..79 = virtual I/O expander ports
-// (GPA0..GPB7, host-emulated on LCIO6/7). Other numbers do not exist.
+// (MCP23017 GPA0..GPB7 / PCA9555 P0_0..P1_7, host-emulated on LCIO6/7).
+// Other numbers do not exist.
 export const NUM_LCIO = 14;  // GPIO LCIOs
 export const LCIO_PCA_FIRST = 32;
 export const LCIO_PCA_COUNT = 16;
@@ -54,7 +55,7 @@ export const ISP_METHODS = [
 export const ISP_METHOD_VALUES = new Set(ISP_METHODS.map(m => m.v));
 
 // Virtual I/O expander chip IDs (spec/03_card_profile.md "virtIoExp").
-export const VIRT_CHIPS = ['mcp23017'];
+export const VIRT_CHIPS = ['mcp23017', 'pca9555'];
 
 export const BUTTONS = ['Left', 'Right', 'Up', 'Down', 'A', 'B', 'X', 'Y', 'START', 'SELECT', 'L bumper', 'R bumper'];
 
@@ -77,7 +78,7 @@ export const LCIO_HINTS = [
 ];
 export function lcioHint(i) {
   if (isPcaLcio(i)) { const n = i - LCIO_PCA_FIRST; return `PCA9555 P${n >> 3}_${n & 7}`; }
-  if (isVirtLcio(i)) { const n = i - LCIO_VIRT_FIRST; return `VirtIoExp GP${n < 8 ? 'A' : 'B'}${n & 7}`; }
+  if (isVirtLcio(i)) { const n = i - LCIO_VIRT_FIRST; return `VirtIoExp GP${n < 8 ? 'A' : 'B'}${n & 7} / P${n >> 3}_${n & 7}`; }
   return LCIO_HINTS[i] ?? '';
 }
 
@@ -212,7 +213,10 @@ export function validate(p) {
       if (q.f !== 0 && dir === 0) warn(`${label}: LCIO${q.i}: function set but direction is "unused"`);
       if (isPcaLcio(q.i) || isVirtLcio(q.i)) {
         const kind = isPcaLcio(q.i) ? 'PCA9555' : 'virtual expander';
-        if (dir !== 0 && dir !== MODE.OUTPUT && dir !== MODE.OPEN_DRAIN) err(`${label}: LCIO${q.i}: ${kind} ports must be OUTPUT or open-drain`);
+        // Virtual display-reset port (LCD I/F): the card drives it through the
+        // emulated expander; the host reads it (INPUT + negative logic).
+        const rstInput = isVirtLcio(q.i) && q.f === 1 && dir === MODE.INPUT;
+        if (dir !== 0 && dir !== MODE.OUTPUT && dir !== MODE.OPEN_DRAIN && !rstInput) err(`${label}: LCIO${q.i}: ${kind} ports must be OUTPUT or open-drain (INPUT only for LCD I/F)`);
         if (q.m & (MODE.PULL_UP | MODE.PULL_DOWN)) warn(`${label}: LCIO${q.i}: pull settings are ignored on ${kind} ports`);
         if (q.f >= 32) err(`${label}: LCIO${q.i}: RESET/BOOTSEL/ISP cannot be on a ${kind} port`);
       }

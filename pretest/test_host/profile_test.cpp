@@ -201,6 +201,61 @@ int main(int argc, char** argv) {
     }
   }
 
+  // A Xiamocon-style frame (optional fourth argument): PCA9555 virtual
+  // expander + TF card + USB ISP, display reset on a virtual port.
+  if (argc > 4) {
+    std::vector<uint8_t> xm = loadHex(argv[4]);
+    CardProfile r;
+    ProfileError xe = profileParseFrame(xm.data(), xm.size(), &r, &n);
+    printf("xiamocon parse: %s (cbor %u bytes) id=%s vio=%d tf=%d isp=%u\n", profileErrorText(xe),
+           n, r.id, r.useVirtIoExp, r.useTfCard, r.ispMethod);
+    assert(xe == ProfileError::OK);
+    assert(strcmp(r.id, "XiamoconRP") == 0);
+    assert(r.useVirtIoExp && r.useTfCard);
+    assert(strcmp(r.virtIoExpChip, "pca9555") == 0 && r.virtIoExpAddr == 34);
+    assert(r.lcio[6].f == func::I2C_SLAVE && r.lcio[7].f == func::I2C_SLAVE);
+    assert(r.lcio[69].f == func::LCD && r.lcio[69].m == (mode::INPUT | mode::NEGATIVE));  // display reset (P0_5)
+    assert(r.lcio[71].f == 26 && r.lcio[71].m == 36);  // function switch = L bumper (P0_7)
+    assert(r.lcio[72].f == 21 && r.lcio[73].f == 20);  // P1_0 = B, P1_1 = A
+    assert(r.lcio[74].f == 22 && r.lcio[79].f == 17);  // P1_2 = X, P1_7 = RIGHT
+    assert(r.keymap[10] == 10 && r.keymap[11] == 10);  // both bumpers -> function switch
+    assert(r.ispMethod == isp_method::USB_MSC);
+    assert(strcmp(r.ispMcu, "rp2350") == 0);
+    assert(profileFindIspOrLcioPort(r, func::RESET) == 13);
+    assert(profileFindIspOrLcioPort(r, func::BOOTSEL) == 12);
+    assert(r.lcdtapPresetId == lcdtap::ConfigPreset::XIAMOCON);
+    profileBuildLcdTapConfig(r, &cfg);
+    assert(cfg.busInterface == lcdtap::BusType::SPI_4LINE);
+    assert(cfg.buffWidth == 240 && cfg.buffHeight == 240);
+
+    // INPUT on a virtual key port is rejected (INPUT is display-reset only):
+    // patch {i:72,f:21,m:36} -> m:33 (INPUT | NEGATIVE).
+    std::vector<uint8_t> vin = xm;
+    {
+      const uint8_t pat[] = {0x61, 'i', 0x18, 0x48, 0x61, 'f', 0x15, 0x61, 'm', 0x18, 0x24};
+      bool done = false;
+      for (size_t i = 4; i + sizeof(pat) <= vin.size() && !done; ++i) {
+        if (memcmp(&vin[i], pat, sizeof(pat)) == 0) { vin[i + 10] = 0x21; done = true; }
+      }
+      assert(done);
+      patchCrc(vin);
+      assert(profileParseFrame(vin.data(), vin.size(), &r, &n) == ProfileError::BAD_PORT_MODE);
+    }
+
+    // Unknown expander chip is a hard error: patch "pca9555" -> "pca9556".
+    std::vector<uint8_t> chip = xm;
+    {
+      const uint8_t pat[] = {0x67, 'p', 'c', 'a', '9', '5', '5', '5'};
+      bool done = false;
+      for (size_t i = 4; i + sizeof(pat) <= chip.size() && !done; ++i) {
+        if (memcmp(&chip[i], pat, sizeof(pat)) == 0) { chip[i + 7] = '6'; done = true; }
+      }
+      assert(done);
+      patchCrc(chip);
+      assert(profileParseFrame(chip.data(), chip.size(), &r, &n) == ProfileError::BAD_VIRT_IO_EXP);
+    }
+  }
+
   printf("ok\n");
   return 0;
 }

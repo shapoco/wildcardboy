@@ -102,6 +102,7 @@
 カードプロファイルの `lcio.useVirtIoExp` が true の場合、ホストコントローラ自身が I2C スレーブとなり、
 ロジックカード上の I/O エキスパンダ IC の動作を模擬する (詳細は [03_card_profile.md](03_card_profile.md) および [04_host_controller.md](04_host_controller.md))。
 ロジックカード上の MCU は、実チップに対するのと同様に I2C マスタとしてホストへアクセスする。
+キーパッド状態のほか、カードによってはディスプレイリセット等の信号もこの経路で受け渡す ([03_card_profile.md](03_card_profile.md))。
 
 |信号名|割り当て|
 |---|---|

@@ -16,5 +16,5 @@ g++ -std=c++17 -O1 -Wall -Wextra $DEFS -I../src -I$QCBOR/inc -I$LCDTAP/include \
 if [ $# -gt 0 ]; then
   ./build/profile_test "$@"
 else
-  ./build/profile_test ../../cards/TinyJoyPad/profile.hex ../../cards/PicoPad1/profile.hex ../../cards/ESPboy/profile.hex
+  ./build/profile_test ../../cards/TinyJoyPad/profile.hex ../../cards/PicoPad1/profile.hex ../../cards/ESPboy/profile.hex ../../cards/XiamoconRP/profile.hex
 fi

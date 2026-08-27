@@ -103,6 +103,26 @@ UART TX/RX のホスト側ポートは書き込み中のみ駆動し、それ以
 - INTA/INTB 割り込み出力は模擬しない。
 - カード起動時 (RESET デアサート時) にレジスタを Power-on 初期値へ戻す。
 
+### PCA9555 の模擬 (`chip` = "pca9555")
+
+- スレーブアドレスは `virtIoExp.addr` (Xiamocon は 0x22 = 34)。それ以外のアドレス宛の転送には応答しない (NACK)。
+  同一バス上に存在し得る他チップ (Xiamocon のバッテリー監視 ADC ADC101C027 (0x52) など) は模擬しない。
+- コマンドレジスタ 0-7 (Input 0/1、Output 2/3、Polarity Inversion 4/5、Configuration 6/7) を実装する。
+  Power-on 初期値は Output = 0xFF、Polarity = 0x00、Configuration = 0xFF (全入力)。
+- レジスタポインタは STOP をまたいで保持する。連続アクセス時のオートインクリメントは
+  レジスタペア内でのトグルとなる (0↔1、2↔3、4↔5、6↔7。MCP23017 の連番インクリメントとは異なる)。
+- Input レジスタの読み出し値は、入力設定ビットはパッドレベル (キー割り当てと負論理指定に従う。
+  未割り当てビットは 1 = プルアップ相当)、出力設定ビットは Output レジスタ値とし、
+  その全体に Polarity Inversion レジスタによる反転を適用する:
+  `Input = ((levels & Config) | (Output & ~Config)) XOR Polarity`。
+  **MCP23017 の模擬と異なり、極性反転を入力値の生成に反映する** (将来のカードでの使用を想定)。
+- Output レジスタへの書き込みは保持し、読み戻せるようにする。
+  機能番号 1 (ディスプレイリセット) が割り当てられた仮想ポート ([03_card_profile.md](03_card_profile.md)) については、
+  Configuration で出力に設定されたビットの Output 値が Low の間、LCD をリセット状態として LcdTap へ転送する
+  (`inputReset()` 相当)。この転送は段階的対応とし、未対応のホストは当該ポートを無視してよい。
+- INT 割り込み出力は模擬しない。
+- カード起動時 (RESET デアサート時) にレジスタを Power-on 初期値へ戻す。
+
 ## ゲームモード
 
 本体側のキーパッド入力をロジックカードに送信する。

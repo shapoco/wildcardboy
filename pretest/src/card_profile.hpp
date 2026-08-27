@@ -14,7 +14,8 @@ static constexpr uint32_t PROFILE_CBOR_MAX = 4096;
 static constexpr uint32_t PROFILE_FRAME_MAX = 4 + PROFILE_CBOR_MAX + 4;
 // LCIO numbering: 0..13 are GPIOs on the bus, 32..47 are the card-side
 // PCA9555 ports (P0_0..P1_7, via LCAUX I2C), 64..79 are the virtual I/O
-// expander ports (GPA0..GPB7, host-emulated on LCIO6/7). Others are unused.
+// expander ports (port A/B: MCP23017 GPA0..GPB7 / PCA9555 P0_0..P1_7,
+// host-emulated on LCIO6/7). Others are unused.
 static constexpr int NUM_LCIO = 80;
 static constexpr int LCIO_GPIO_COUNT = 14;
 static constexpr int LCIO_PCA_FIRST = 32;
@@ -90,7 +91,7 @@ struct CardProfile {
   PortCfg lcio[NUM_LCIO];
   bool useTfCard;  // card owns the TF card while running (LCTF_ENAX low)
   bool useVirtIoExp;       // host emulates an I/O expander on LCIO6/7 (i2c1 slave)
-  char virtIoExpChip[17];  // virtIoExp.chip ("mcp23017"); empty = member absent
+  char virtIoExpChip[17];  // virtIoExp.chip ("mcp23017" / "pca9555"); empty = member absent
   uint8_t virtIoExpAddr;   // virtIoExp.addr (I2C slave address)
   char lcdtapPreset[32];
   lcdtap::ConfigPreset lcdtapPresetId;

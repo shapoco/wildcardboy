@@ -60,7 +60,7 @@
       <div><label><input id="f-usevio" type="checkbox"> The host emulates an I2C I/O expander on LCIO6/7 (chip/address: virtIoExp in the JSON)</label></div>
     </div>
     <h3>Virtual I/O expander ports (LCIO64-79, host-emulated)</h3>
-    <p class="note">Keypad functions only; pull settings are ignored. Requires lcio.useVirtIoExp and the virtIoExp member.</p>
+    <p class="note">Keypad functions, plus LCD I/F (1) as the display-reset input (Input + Neg.); pull settings are ignored. Requires lcio.useVirtIoExp and the virtIoExp member.</p>
     <table class="ports" id="t-lcio-virt">
       <thead><tr><th>LCIO</th><th>Function</th><th>Direction</th><th>Pull</th><th class="neg">Neg.</th><th>Port</th></tr></thead>
       <tbody></tbody>

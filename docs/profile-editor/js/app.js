@@ -48,8 +48,10 @@ const ui = { lcio: [], isp: [], cfg: [], keymap: [] };
 function buildPortTable(tbody, rows, functions, indices) {
   tbody.replaceChildren();
   for (const i of indices) {
-    const pca = isPcaLcio(i) || isVirtLcio(i);  // no input role, pulls ignored
-    const dirs = pca ? DIRECTIONS.filter(d => d.v !== MODE.INPUT) : DIRECTIONS;  // no input role on PCA9555
+    const pca = isPcaLcio(i) || isVirtLcio(i);  // pulls ignored
+    // No input role on PCA9555; virtual ports use Input only for the
+    // display-reset port (LCD I/F) -- validation enforces the pairing.
+    const dirs = isPcaLcio(i) ? DIRECTIONS.filter(d => d.v !== MODE.INPUT) : DIRECTIONS;
     const fn = el('select', { onchange: onUiChange }, functions.map(f => option(f.v, f.name)));
     const dir = el('select', { onchange: onUiChange }, dirs.map(d => option(d.v, d.name)));
     const pull = el('select', { onchange: onUiChange, disabled: pca }, PULLS.map(p => option(p.v, p.name)));
@@ -99,7 +101,7 @@ function buildKeymapTable() {
 function buildSettings() {
   buildPortTable($('#t-lcio tbody'), ui.lcio, FUNCTIONS, LCIO_GPIO_LIST);
   buildPortTable($('#t-lcio-pca tbody'), ui.lcio, FUNCTIONS.filter(f => f.v < 32), LCIO_PCA_LIST);
-  buildPortTable($('#t-lcio-virt tbody'), ui.lcio, FUNCTIONS.filter(f => f.v === 0 || (f.v >= 16 && f.v <= 27)), LCIO_VIRT_LIST);
+  buildPortTable($('#t-lcio-virt tbody'), ui.lcio, FUNCTIONS.filter(f => f.v === 0 || f.v === 1 || (f.v >= 16 && f.v <= 27)), LCIO_VIRT_LIST);
   buildPortTable($('#t-isp tbody'), ui.isp, ISP_FUNCTIONS, LCIO_GPIO_LIST);
   $('#f-usetf').addEventListener('change', onUiChange);
   $('#f-usevio').addEventListener('change', onUiChange);

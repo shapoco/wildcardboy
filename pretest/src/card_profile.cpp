@@ -148,10 +148,14 @@ static ProfileError checkPorts(const PortCfg* ports, const char* what, bool ispT
     }
     if (lcioIsPca(i) || lcioIsVirt(i)) {
       // PCA9555 / virtual expander ports: push-pull or open-drain (direction
-      // switching) outputs; pulls are fixed by the (emulated) chip.
+      // switching) outputs; pulls are fixed by the (emulated) chip. On
+      // virtual ports, INPUT is allowed only for the display-reset port
+      // (f = LCD): the card MCU drives it through the emulated expander and
+      // the host reads it back (spec/03).
       const char* kind = lcioIsPca(i) ? "PCA9555" : "virtual expander";
-      if (dir != mode::OUTPUT && dir != mode::OPEN_DRAIN) {
-        printf("[profile] %s: LCIO%d: %s ports must be OUTPUT or OPEN_DRAIN\n", what, i, kind);
+      bool rstInput = lcioIsVirt(i) && p.f == func::LCD && dir == mode::INPUT;
+      if (dir != mode::OUTPUT && dir != mode::OPEN_DRAIN && !rstInput) {
+        printf("[profile] %s: LCIO%d: %s ports must be OUTPUT or OPEN_DRAIN (INPUT only for LCD I/F)\n", what, i, kind);
         return ProfileError::BAD_PORT_MODE;
       }
       if (p.f >= func::RESET) {
@@ -161,8 +165,9 @@ static ProfileError checkPorts(const PortCfg* ports, const char* what, bool ispT
     }
     if (p.f == func::TF) printf("[profile] warning: %s: LCIO%d: TF card I/F is not supported by pretest\n", what, i);
     // LCD pins: I2C = LCIO2/3, SPI = LCIO0-4 (fixed maps in spec/02); anything
-    // beyond that is the unsupported parallel bus.
-    if (p.f == func::LCD && i > 4) {
+    // beyond that is the unsupported parallel bus. A virtual port with f = LCD
+    // is the display-reset input (spec/03), not an LCD bus pin.
+    if (p.f == func::LCD && i > 4 && !lcioIsVirt(i)) {
       printf("[profile] warning: %s: LCIO%d: LCD I/F outside the I2C/SPI pin range (LCIO0-4)\n", what, i);
     }
   }
@@ -352,10 +357,10 @@ static ProfileError checkProfile(CardProfile* p) {
     if (p->lcio[i].f != 0 || p->lcio[i].m != 0) { virtPortSeen = true; break; }
   }
   if (p->useVirtIoExp) {
-    if (strcmp(p->virtIoExpChip, "mcp23017") != 0) {
+    if (strcmp(p->virtIoExpChip, "mcp23017") != 0 && strcmp(p->virtIoExpChip, "pca9555") != 0) {
       // The web editor only warns on an unknown chip; pretest cannot emulate
       // one, so this is a hard error here.
-      printf("[profile] virtIoExp.chip \"%s\" is not supported (mcp23017 only)\n", p->virtIoExpChip);
+      printf("[profile] virtIoExp.chip \"%s\" is not supported (mcp23017 / pca9555 only)\n", p->virtIoExpChip);
       return ProfileError::BAD_VIRT_IO_EXP;
     }
     if (p->virtIoExpAddr == 0) {

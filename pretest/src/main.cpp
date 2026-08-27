@@ -144,7 +144,7 @@ static bool cardStart() {
          cfg.buffWidth, cfg.buffHeight);
 
   // Virtual I/O expander: slave up, registers at POR, before the MCU runs.
-  if (gProfile.useVirtIoExp) vioInit(gProfile.virtIoExpAddr);
+  if (gProfile.useVirtIoExp) vioInit(vioChipById(gProfile.virtIoExpChip), gProfile.virtIoExpAddr);
 
   // Release the MCU; mirror the reset into LcdTap.
   core1Call(Core1Cmd::LCDTAP_RESET_ASSERT);

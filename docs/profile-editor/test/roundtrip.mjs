@@ -42,6 +42,20 @@ assert.throws(() => encode({ x: null }));
   assert.ok(!errs.some(m => m.includes('LCIO32')));
   assert.ok(!errs.some(m => m.includes('LCIO33')));  // open-drain + negative is fine
 }
+// Virtual expander ports: keys must be output/open-drain; INPUT is allowed only
+// for the display-reset port (LCD I/F), and "pca9555" is a known chip ID
+{
+  const p = normalize({ ...DEFAULT_PROFILE, lcio: { useVirtIoExp: true, ports: [
+    { i: 6, f: 48, m: 1 }, { i: 7, f: 48, m: 1 },
+    { i: 69, f: 1, m: 33 }, { i: 70, f: 16, m: 33 }, { i: 72, f: 20, m: 36 },
+  ] }, virtIoExp: { chip: 'pca9555', addr: 34 } });
+  const msgs = validate(p);
+  const errs = msgs.filter(m => m.level === 'error').map(m => m.msg);
+  assert.ok(!errs.some(m => m.includes('LCIO69')));  // display-reset input is allowed
+  assert.ok(errs.some(m => m.includes('LCIO70') && m.includes('OUTPUT')));  // Input key is not
+  assert.ok(!errs.some(m => m.includes('LCIO72')));
+  assert.ok(!msgs.some(m => m.msg.includes('pca9555')));  // known chip ID
+}
 // isp.mcu round-trips and is validated
 {
   const p = normalize({ ...DEFAULT_PROFILE, isp: { ...DEFAULT_PROFILE.isp, mcu: 'atmega32u4' } });
