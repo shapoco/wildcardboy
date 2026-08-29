@@ -75,6 +75,29 @@ assert.throws(() => encode({ x: null }));
   const q = normalize({ ...DEFAULT_PROFILE, isp: { method: 16, ports: [{ i: 13, f: 32, m: 36 }, { i: 12, f: 33, m: 36 }] } });
   assert.ok(!validate(q).some(m => m.level === 'error'));
 }
+// VSYNC out port (function 3) and the vsync member
+{
+  const basePorts = DEFAULT_PROFILE.lcio.ports;
+  const withVs = ports => normalize({ ...DEFAULT_PROFILE, lcio: { ports }, vsync: { hz: 60, pulseUs: 1000 } });
+  const p = withVs([...basePorts, { i: 4, f: 3, m: 2 }]);
+  assert.deepEqual(p.vsync, { hz: 60, pulseUs: 1000 });
+  assert.deepEqual(validate(p).filter(m => m.level === 'error'), []);
+  assert.deepEqual(normalize(decode(encode(p)).value), p);
+  assert.ok(validate(normalize({ ...DEFAULT_PROFILE, lcio: { ports: [...basePorts, { i: 40, f: 3, m: 2 }] } }))
+    .some(m => m.level === 'error' && m.msg.includes('VSYNC')));
+  assert.ok(validate(normalize({ ...DEFAULT_PROFILE, lcio: { ports: [...basePorts, { i: 4, f: 3, m: 1 }] } }))
+    .some(m => m.level === 'error' && m.msg.includes('OUTPUT')));
+  assert.ok(validate(normalize({ ...DEFAULT_PROFILE, lcio: { ports: [...basePorts, { i: 4, f: 3, m: 2 }, { i: 10, f: 3, m: 2 }] } }))
+    .some(m => m.level === 'error' && m.msg.includes('multiple')));
+  const badHz = withVs([...basePorts, { i: 4, f: 3, m: 2 }]); badHz.vsync.hz = 10;
+  assert.ok(validate(badHz).some(m => m.level === 'error' && m.msg.includes('vsync.hz')));
+  const badPw = withVs([...basePorts, { i: 4, f: 3, m: 2 }]); badPw.vsync.pulseUs = 20000;
+  assert.ok(validate(badPw).some(m => m.level === 'error' && m.msg.includes('pulse period')));
+  // vsync without a port is only a warning
+  const noPort = validate(normalize({ ...DEFAULT_PROFILE, vsync: { hz: 60, pulseUs: 1000 } }));
+  assert.ok(noPort.some(m => m.level === 'warn' && m.msg.includes('VSYNC')));
+  assert.deepEqual(noPort.filter(m => m.level === 'error'), []);
+}
 assert.deepEqual(decode(new Uint8Array([0x9F, 0x01, 0x02, 0xFF])).value, [1, 2]); // indefinite array
 
 // Profile round trip: cards/TinyJoyPad/profile.json -> CBOR -> frame -> HEX -> back
@@ -91,6 +114,18 @@ const parsed = parse(back);
 assert.equal(parsed.crc, crc);
 assert.deepEqual(normalize(parsed.profile), prof);
 assert.deepEqual(normalize(DEFAULT_PROFILE), prof, 'built-in default must equal cards/TinyJoyPad/profile.json');
+
+// PicoSystem profile: 8-bit parallel LCD (on-card deserializer), no vsync member
+{
+  const ps = normalize(JSON.parse(readFileSync(join(here, '../../../cards/PicoSystem/profile.json'), 'utf8')));
+  assert.deepEqual(validate(ps).filter(m => m.level === 'error'), []);
+  assert.equal(ps.vsync, undefined);
+  for (let i = 0; i <= 11; i++) assert.ok(ps.lcio.ports.some(q => q.i === i && q.f === 1));
+  assert.equal(ps.lcdtap.cfg, undefined);  // preset default (PARALLEL) applies
+  assert.ok(ps.lcio.ports.some(q => q.i === 32 && q.f === 16 && q.m === 34));
+  const img = build(ps);
+  assert.deepEqual(normalize(parse(fromHex(toHex(img.bytes))).profile), ps);
+}
 
 // Corruption is detected
 const bad = bytes.slice(); bad[10] ^= 0x01;

@@ -48,6 +48,12 @@ CBOR オブジェクトの内容は次の通り。
     }
   },
 
+  // LCD VSYNC 出力の設定 (機能番号 3 のポートを持つ場合。省略可)
+  "vsync": {
+    "hz": <パルス周波数>, // Hz。省略時 60
+    "pulseUs": <パルス幅> // マイクロ秒。省略時 1000
+  },
+
   // ロジックカード上の MCU へのプログラム書き込みに使用する ISP プロトコル
   "isp": {
     "mcu": "<MCU ID>", // 最大 16 バイト (ヌル終端除く)
@@ -111,6 +117,7 @@ LCIO64-79 は `lcio.useVirtIoExp` が true の場合に有効な仮想ポート�
 |0|未使用|
 |1|LCD I/F|
 |2|TF カード I/F|
+|3|LCD VSYNC 出力|
 |16|左ボタン|
 |17|右ボタン|
 |18|上ボタン|
@@ -208,6 +215,14 @@ UART には任意の LCIO を割り当てられるが、LCIO10 (TX) / LCIO11 (RX
 各信号 (SDA/SCL、MOSI/MISO/SCK/CS など) の LCIO への割り当ては [WildCardBus](02_wildcardbus.md) の固定表に従う (PIO や物理配線の都合で自由には選べない)。
 キーパッド I/F が I2C の場合の割り当ても同様に [WildCardBus](02_wildcardbus.md) の固定表に従う。
 `lcio.ports` に現れない LCIO は未使用 (High-Z) とする。
+
+機能番号 3 (LCD VSYNC 出力) のポートは LCIO0-13 にのみ、高々 1 つ割り当てることができる。
+モードは `出力` とする (`負論理` でパルス極性を反転できる)。
+ホストシェルはカード動作中、このポートに `vsync` メンバで指定された自走パルスを PWM で出力する
+([02_wildcardbus.md](02_wildcardbus.md)、[04_host_controller.md](04_host_controller.md))。
+`vsync` メンバは省略可能で、`hz` (パルス周波数 [Hz]、20〜1000、省略時 60) と
+`pulseUs` (パルス幅 [µs]、1 以上かつ周期未満、省略時 1000) を持つ。
+機能番号 3 のポートが無い場合、`vsync` メンバは無視される。
 
 `lcdtap.cfg` は、LcdTap の `CONFIG_IDS` (`ctrlFamily`, `busInterface`, `i2cAddr`, `buffWidth`, ... `scaleMode`) をキー、
 `setConfigValueById()` に渡す int16 値を値とするマップで、プリセットを適用した後に上書きされる

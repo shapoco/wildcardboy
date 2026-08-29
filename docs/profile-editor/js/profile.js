@@ -26,6 +26,7 @@ export const FUNCTIONS = [
   { v: 0, name: 'Unused' },
   { v: 1, name: 'LCD I/F' },
   { v: 2, name: 'TF card I/F' },
+  { v: 3, name: 'VSYNC out' },
   { v: 16, name: 'Left' }, { v: 17, name: 'Right' }, { v: 18, name: 'Up' }, { v: 19, name: 'Down' },
   { v: 20, name: 'A' }, { v: 21, name: 'B' }, { v: 22, name: 'X' }, { v: 23, name: 'Y' },
   { v: 24, name: 'START' }, { v: 25, name: 'SELECT' }, { v: 26, name: 'L bumper' }, { v: 27, name: 'R bumper' },
@@ -39,6 +40,10 @@ export const FUNCTION_VALUES = new Set(FUNCTIONS.map(f => f.v));
 
 export const MODE = { INPUT: 1, OUTPUT: 2, OPEN_DRAIN: 4, PULL_UP: 8, PULL_DOWN: 16, NEGATIVE: 32 };
 export const MODE_MAX = 63;
+
+// LCD VSYNC output (function 3, spec/03): host-generated free-running pulse.
+export const VSYNC_HZ_MIN = 20, VSYNC_HZ_MAX = 1000;
+export const VSYNC_HZ_DEFAULT = 60, VSYNC_PULSE_US_DEFAULT = 1000;
 
 // MCU IDs (spec/03_card_profile.md "MCU ID").
 export const MCU_IDS = ['attiny85', 'atmega32u4', 'rp2040', 'rp2350', 'esp8266'];
@@ -170,6 +175,11 @@ export function normalize(src) {
       }
       return copyUnknown(o, lcdtap, ['preset', 'cfg']);
     })(),
+    ...(isObj(s.vsync) ? {
+      vsync: copyUnknown(
+        { hz: toInt(s.vsync.hz, VSYNC_HZ_DEFAULT), pulseUs: toInt(s.vsync.pulseUs, VSYNC_PULSE_US_DEFAULT) },
+        s.vsync, ['hz', 'pulseUs']),
+    } : {}),
     isp: copyUnknown(
       Object.assign(
         typeof isp.mcu === 'string' && isp.mcu !== '' ? { mcu: String(isp.mcu) } : {},
@@ -180,7 +190,7 @@ export function normalize(src) {
         .filter(isObj).map(e => ({ s: toInt(e.s), d: toInt(e.d) })).sort((a, b) => a.s - b.s),
     }, keymap, ['map']),
   };
-  copyUnknown(out, s, ['format', 'id', 'name', 'lcio', 'virtIoExp', 'lcdtap', 'isp', 'keymap']);
+  copyUnknown(out, s, ['format', 'id', 'name', 'lcio', 'virtIoExp', 'lcdtap', 'vsync', 'isp', 'keymap']);
   return out;
 }
 
@@ -221,10 +231,30 @@ export function validate(p) {
         if (q.f >= 32) err(`${label}: LCIO${q.i}: RESET/BOOTSEL/ISP cannot be on a ${kind} port`);
       }
       if (q.f === 48 && q.i !== 6 && q.i !== 7) err(`${label}: LCIO${q.i}: I2C slave (48) is fixed to LCIO6/7`);
+      if (q.f === 3) {
+        if (q.i >= NUM_LCIO) err(`${label}: LCIO${q.i}: VSYNC out (3) must be on a GPIO LCIO (0-${NUM_LCIO - 1})`);
+        else if (dir !== 0 && dir !== MODE.OUTPUT) err(`${label}: LCIO${q.i}: VSYNC out (3) ports must be OUTPUT`);
+      }
     }
   };
   checkPorts(p.lcio.ports, 'lcio', FUNCTION_VALUES);
   checkPorts(p.isp.ports, 'isp', new Set(ISP_FUNCTIONS.map(f => f.v)));
+
+  {
+    const vsyncPorts = p.lcio.ports.filter(q => q.f === 3);
+    if (vsyncPorts.length > 1) err('lcio: multiple VSYNC out (3) ports');
+    if (p.vsync) {
+      if (!Number.isInteger(p.vsync.hz) || p.vsync.hz < VSYNC_HZ_MIN || p.vsync.hz > VSYNC_HZ_MAX) {
+        err(`vsync.hz must be ${VSYNC_HZ_MIN}-${VSYNC_HZ_MAX}`);
+      }
+      if (!Number.isInteger(p.vsync.pulseUs) || p.vsync.pulseUs < 1) {
+        err('vsync.pulseUs must be a positive integer');
+      } else if (Number.isInteger(p.vsync.hz) && p.vsync.hz > 0 && p.vsync.pulseUs * p.vsync.hz >= 1000000) {
+        err('vsync.pulseUs must be shorter than the pulse period (pulseUs * hz < 1000000)');
+      }
+      if (vsyncPorts.length === 0) warn('vsync is set but there is no VSYNC out (3) port');
+    }
+  }
 
   const hasPort = (list, f) => list.some(q => q.f === f && (q.m & (MODE.INPUT | MODE.OUTPUT | MODE.OPEN_DRAIN)) !== 0);
   const hasAny = f => hasPort(p.isp.ports, f) || hasPort(p.lcio.ports, f);

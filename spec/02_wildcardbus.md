@@ -63,6 +63,14 @@
 |LCIO10|LCLCD_D7|
 |LCIO11|LCLCD_DC|
 
+## LCD VSYNC 出力
+
+ロジックカード上の MCU が LCD からの同期信号 (ST7789 の TE 信号など) の入力を要求する場合は、
+ホストシェルが生成する自走パルスをロジックカードへ供給する (物理 LCD とは同期しない。
+[04_host_controller.md](04_host_controller.md))。
+割り当ては固定ではなく、カードプロファイルで機能番号 3 のポートとして空いている任意の LCIO に
+割り当てる ([03_card_profile.md](03_card_profile.md))。LCD I/F が SPI のカードでは LCIO5 を推奨する。
+
 ## キーパッド I/F がパラレルの場合
 
 ロジックカード側の LCD I/F がパラレル以外の場合で、TF カード I/F を持たず、使用するキーが方向キーと A、B、START、SELECT のみの場合は、キーパッド I/F はパラレル接続となる。

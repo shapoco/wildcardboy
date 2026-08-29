@@ -12,9 +12,10 @@
 
 namespace wcb {
 
-// Flash timing for 288 MHz: clkdiv 3 (96 MHz), rxdelay 2. Runs from SRAM
-// and waits for the QSPI bus to be idle (after the LcdTap pico2 example).
-static void __no_inline_not_in_flash_func(setQmiTiming288)() {
+// Flash timing for 312 MHz: clkdiv 3 (104 MHz), rxdelay 2 (identical to the
+// LcdTap pico2 example at 312 MHz). Runs from SRAM and waits for the QSPI
+// bus to be idle.
+static void __no_inline_not_in_flash_func(setQmiTiming312)() {
   while ((ioqspi_hw->io[1].status & IO_QSPI_GPIO_QSPI_SS_STATUS_OUTTOPAD_BITS) !=
          IO_QSPI_GPIO_QSPI_SS_STATUS_OUTTOPAD_BITS) {
   }
@@ -23,7 +24,7 @@ static void __no_inline_not_in_flash_func(setQmiTiming288)() {
   (void)*xip;
 }
 
-void __no_inline_not_in_flash_func(sysClockInit288)() {
+void __no_inline_not_in_flash_func(sysClockInit312)() {
   const uint32_t intr = save_and_disable_interrupts();
 
   // Slow the flash clock first so it stays in spec during the transition.
@@ -40,8 +41,8 @@ void __no_inline_not_in_flash_func(sysClockInit288)() {
   hw_clear_bits(&clocks_hw->clk[clk_sys].ctrl, CLOCKS_CLK_SYS_CTRL_SRC_BITS);
   while (clocks_hw->clk[clk_sys].selected != 0x1u) tight_loop_contents();
 
-  // VCO 1440 MHz / 5 / 1 = 288 MHz.
-  pll_init(pll_sys, PLL_SYS_REFDIV, 1440 * MHZ, 5, 1);
+  // VCO 1560 MHz / 5 / 1 = 312 MHz.
+  pll_init(pll_sys, PLL_SYS_REFDIV, 1560 * MHZ, 5, 1);
 
   clock_configure(clk_sys, CLOCKS_CLK_SYS_CTRL_SRC_VALUE_CLKSRC_CLK_SYS_AUX,
                   CLOCKS_CLK_SYS_CTRL_AUXSRC_VALUE_CLKSRC_PLL_SYS, SYS_CLOCK_HZ,
@@ -49,7 +50,7 @@ void __no_inline_not_in_flash_func(sysClockInit288)() {
   clock_configure(clk_peri, 0, CLOCKS_CLK_PERI_CTRL_AUXSRC_VALUE_CLKSRC_PLL_SYS,
                   SYS_CLOCK_HZ, SYS_CLOCK_HZ / 2);
 
-  setQmiTiming288();
+  setQmiTiming312();
   restore_interrupts(intr);
 }
 

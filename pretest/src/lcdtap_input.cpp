@@ -11,6 +11,8 @@
 #include <lcdtap/pico2/i2c_slave.hpp>
 #include <lcdtap/pico2/spi_slave.hpp>
 
+#include "parallel_8bit.pio.h"
+
 #include "board_pins.hpp"
 
 namespace wcb {
@@ -30,6 +32,14 @@ static constexpr uint PIN_SPI_MOSI = 3;
 static constexpr uint PIN_SPI_DC = 4;
 static_assert(PIN_SPI_CS == 1 && PIN_SPI_SCLK == 2, "spi_4line_mode0.pio pin map");
 
+// 8-bit parallel pins (WildCardBus fixed assignment, spec/02): CS / WR are
+// baked into parallel_8bit.pio (GPIO1 / GPIO2), D0-7 = GPIO3-10 (IN_BASE),
+// DC = GPIO11 (IN_BASE + 8). Cards with an on-board deserializer
+// (PicoSystem) feed BCLK = SCLK/8 into WR.
+static constexpr uint PIN_PAR_D0 = 3;
+static constexpr uint PIN_PAR_DC = PIN_PAR_D0 + 8;  // 11
+static_assert(PAR_CS_PIN == 1 && PAR_WR_PIN == 2, "parallel_8bit.pio pin map");
+
 static uint32_t sI2cRing[I2C_RING_WORDS];
 static uint32_t __attribute__((aligned(SPI_RING_BYTES))) sSpiRing[SPI_RING_WORDS];
 
@@ -47,9 +57,15 @@ static uint16_t sDirtyRow = 0;
 // GPIO IRQ (core 1): SPI CS rise resyncs the PIO SM; RST mirrors into LcdTap.
 //-----------------------------------------------------------------------------
 static void __not_in_flash_func(gpioIrqHandler)(uint gpio, uint32_t events) {
-  if (!sAttached || sBus != lcdtap::BusType::SPI_4LINE) return;
+  if (!sAttached ||
+      (sBus != lcdtap::BusType::SPI_4LINE && sBus != lcdtap::BusType::PARALLEL)) {
+    return;
+  }
   if (gpio == PIN_SPI_CS) {
-    if (events & GPIO_IRQ_EDGE_RISE) lcdtap::pico2::spiSlaveResetSm(&sSpi);
+    // SPI only: the parallel program gates on CS inside the SM instead.
+    if (sBus == lcdtap::BusType::SPI_4LINE && (events & GPIO_IRQ_EDGE_RISE)) {
+      lcdtap::pico2::spiSlaveResetSm(&sSpi);
+    }
   } else if (gpio == PIN_SPI_RST && sTap) {
     if (events & GPIO_IRQ_EDGE_FALL) {
       sTap->inputReset(true);
@@ -85,6 +101,50 @@ void lcdtapInputAttach(lcdtap::LcdTap* tap, lcdtap::BusType bus, uint8_t i2cAddr
     sI2c.backlogMaxWords = 0;
     lcdtap::pico2::i2cSlaveInit(&sI2c, cfg, sI2cRing, I2C_RING_WORDS);
     sI2c.inst = tap;
+  } else if (bus == lcdtap::BusType::PARALLEL) {
+    // 8-bit parallel (spec/02 fixed assignment). RST input with pull-up;
+    // the card drives it low during its own reset.
+    gpio_init(PIN_SPI_RST);
+    gpio_set_dir(PIN_SPI_RST, GPIO_IN);
+    gpio_pull_up(PIN_SPI_RST);
+    // CS gates every strobe inside the SM (jmp pin); pull-up = deselected
+    // while the card is floating.
+    gpio_init(PIN_SPI_CS);
+    gpio_set_dir(PIN_SPI_CS, GPIO_IN);
+    gpio_pull_up(PIN_SPI_CS);
+    gpio_init(PIN_SPI_SCLK);  // WR / BCLK
+    gpio_set_dir(PIN_SPI_SCLK, GPIO_IN);
+    for (uint pin = PIN_PAR_D0; pin <= PIN_PAR_DC; ++pin) {  // D0-7 + DC
+      gpio_init(pin);
+      gpio_set_dir(pin, GPIO_IN);
+    }
+
+    sSpi.inst = nullptr;
+    sSpi.dropWords = 0;
+    sSpi.backlogMaxWords = 0;
+    sSpi.cfg = {pio2, 0, PIN_SPI_CS, PIN_SPI_SCLK, PIN_SPI_MOSI, PIN_SPI_DC,
+                SPI_RING_LOG2};
+    sSpi.ringBuf = sSpiRing;
+    sSpi.ringWords = SPI_RING_WORDS;
+    sSpi.dmaCh = -1;
+    sSpi.readIdx = 0;
+    sSpi.progOffset = pio_add_program(pio2, &parallel_8bit_program);
+    sSpi.pioProgram = &parallel_8bit_program;
+    pio_sm_config c = parallel_8bit_program_get_default_config(sSpi.progOffset);
+    sm_config_set_in_pins(&c, PIN_PAR_D0);
+    sm_config_set_in_shift(&c, /*shift_right=*/false, /*autopush=*/false, 32);
+    sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_RX);
+    sm_config_set_jmp_pin(&c, PIN_SPI_CS);
+    pio_sm_init(pio2, 0, sSpi.progOffset, &c);
+    pio_sm_set_enabled(pio2, 0, true);
+    lcdtap::pico2::spiSlaveInitDma(&sSpi);
+    sSpi.inst = tap;
+
+    // No CS-rise resync IRQ (the SM gates on CS itself); RST is mirrored.
+    gpio_set_irq_enabled_with_callback(PIN_SPI_RST,
+                                       GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE,
+                                       true, gpioIrqHandler);
+    tap->inputReset(!gpio_get(PIN_SPI_RST));
   } else {
     // RST input with pull-up; the card drives it low during its own reset.
     gpio_init(PIN_SPI_RST);
@@ -115,9 +175,16 @@ void lcdtapInputDetach() {
     gpio_set_irq_enabled(PIN_SPI_RST, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, false);
     lcdtap::pico2::spiSlaveDeinit(&sSpi);
     sSpi.inst = nullptr;
-    for (uint pin : {PIN_SPI_RST, PIN_SPI_CS, PIN_SPI_SCLK, PIN_SPI_MOSI, PIN_SPI_DC}) {
-      gpio_init(pin);
-      gpio_disable_pulls(pin);
+    if (sBus == lcdtap::BusType::PARALLEL) {
+      for (uint pin = PIN_SPI_RST; pin <= PIN_PAR_DC; ++pin) {  // LCIO0-11
+        gpio_init(pin);
+        gpio_disable_pulls(pin);
+      }
+    } else {
+      for (uint pin : {PIN_SPI_RST, PIN_SPI_CS, PIN_SPI_SCLK, PIN_SPI_MOSI, PIN_SPI_DC}) {
+        gpio_init(pin);
+        gpio_disable_pulls(pin);
+      }
     }
   }
   sTap = nullptr;
@@ -131,7 +198,8 @@ void lcdtapInputSetReset(bool assert) {
   // Cards with CS tied low and no RST wire (ESPboy) never fire the GPIO
   // resync IRQs above; the host-driven card reset is the byte-framing
   // resync point instead. Harmless for cards that do have CS/RST edges.
-  if (sAttached && sBus == lcdtap::BusType::SPI_4LINE) {
+  if (sAttached && (sBus == lcdtap::BusType::SPI_4LINE ||
+                    sBus == lcdtap::BusType::PARALLEL)) {
     lcdtap::pico2::spiSlaveResetSm(&sSpi);
   }
 }

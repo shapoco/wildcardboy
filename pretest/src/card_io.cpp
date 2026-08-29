@@ -3,8 +3,10 @@
 #include <cstdio>
 #include <cstring>
 
+#include "hardware/clocks.h"
 #include "hardware/gpio.h"
 #include "hardware/i2c.h"
+#include "hardware/pwm.h"
 #include "pico/stdlib.h"
 
 #include "aux_i2c.hpp"
@@ -29,6 +31,12 @@ static char sIspMcu[17];
 static bool sUseTfCard = false;
 static PortCfg sIsp[NUM_LCIO];
 static uint16_t sLastKeys = 0;
+
+// LCD VSYNC output (function 3): free-running PWM pulse (spec/04).
+static int sVsyncIdx = -1;
+static uint16_t sVsyncHz = VSYNC_HZ_DEFAULT;
+static uint32_t sVsyncPulseUs = VSYNC_PULSE_US_DEFAULT;
+static bool sVsyncRunning = false;
 
 // PCA9555 (LCIO32-47) output image and configuration.
 static uint16_t sPcaOut = 0xFFFF;
@@ -184,6 +192,10 @@ void cardIoConfigure(const CardProfile& p) {
   };
   sResetIdx = pick(func::RESET);
   sBootselIdx = pick(func::BOOTSEL);
+  sVsyncIdx = profileFindPort(p.lcio, func::VSYNC);
+  if (sVsyncIdx >= 0 && !lcioIsGpio(sVsyncIdx)) sVsyncIdx = -1;  // parser rejects this
+  sVsyncHz = p.vsyncHz;
+  sVsyncPulseUs = p.vsyncPulseUs;
   if (sResetIdx < 0) printf("[card_io] profile has no RESET line\n");
 
   if (sPcaUsed) {
@@ -197,6 +209,7 @@ void cardIoConfigure(const CardProfile& p) {
 }
 
 void cardIoRelease() {
+  cardVsyncStop();
   for (int i = 0; i < NUM_LCIO; ++i) {
     if (sLines[i].configured && lcioIsGpio(i)) {
       uint pin = pinOf(i);
@@ -211,6 +224,7 @@ void cardIoRelease() {
   sPcaCfgDirty = false;
   sResetIdx = -1;
   sBootselIdx = -1;
+  sVsyncIdx = -1;
   sLastKeys = 0;
 }
 
@@ -238,6 +252,54 @@ void cardResetRelease() { if (sResetIdx >= 0) driveLine(sResetIdx, false); }
 bool cardHasBootsel() { return sBootselIdx >= 0; }
 void cardBootselAssert() { if (sBootselIdx >= 0) driveLine(sBootselIdx, true); }
 void cardBootselRelease() { if (sBootselIdx >= 0) driveLine(sBootselIdx, false); }
+
+bool cardHasVsync() { return sVsyncIdx >= 0; }
+
+void cardVsyncStart() {
+  if (sVsyncIdx < 0 || sVsyncRunning) return;
+  const uint pin = pinOf(sVsyncIdx);
+  const uint32_t clk = clock_get_hz(clk_sys);
+  // Integer divider so that one period fits the 16-bit counter
+  // (hz >= 20 keeps div < 256 up to clk_sys = 334 MHz).
+  uint32_t div = (clk / sVsyncHz + 65535) / 65536;
+  if (div < 1) div = 1;
+  if (div > 255) div = 255;
+  uint32_t wrap = clk / (div * sVsyncHz);  // counts per period
+  if (wrap > 65536) wrap = 65536;
+  uint32_t level = static_cast<uint32_t>(
+      (static_cast<uint64_t>(sVsyncPulseUs) * (clk / div)) / 1000000u);
+  if (level < 1) level = 1;
+  if (level >= wrap) level = wrap - 1;
+
+  const uint slice = pwm_gpio_to_slice_num(pin);
+  const uint chan = pwm_gpio_to_channel(pin);
+  pwm_config cfg = pwm_get_default_config();
+  pwm_config_set_clkdiv_int(&cfg, div);
+  pwm_config_set_wrap(&cfg, static_cast<uint16_t>(wrap - 1));
+  pwm_init(slice, &cfg, false);
+  pwm_set_chan_level(slice, chan, static_cast<uint16_t>(level));
+  const bool inv = isNegative(sLines[sVsyncIdx]);
+  pwm_set_output_polarity(slice, chan == PWM_CHAN_A && inv, chan == PWM_CHAN_B && inv);
+  pwm_set_counter(slice, 0);
+  pwm_set_enabled(slice, true);
+  gpio_set_function(pin, GPIO_FUNC_PWM);
+  sVsyncRunning = true;
+  printf("[card_io] VSYNC on LCIO%d: %u Hz, pulse %lu us (pwm div %lu wrap %lu level %lu)\n",
+         sVsyncIdx, sVsyncHz, static_cast<unsigned long>(sVsyncPulseUs),
+         static_cast<unsigned long>(div), static_cast<unsigned long>(wrap),
+         static_cast<unsigned long>(level));
+}
+
+void cardVsyncStop() {
+  if (!sVsyncRunning) return;
+  const uint pin = pinOf(sVsyncIdx);
+  pwm_set_enabled(pwm_gpio_to_slice_num(pin), false);
+  // Back to SIO output at the released (non-pulse) level.
+  gpio_put(pin, isNegative(sLines[sVsyncIdx]) ? 1 : 0);
+  gpio_set_dir(pin, GPIO_OUT);
+  gpio_set_function(pin, GPIO_FUNC_SIO);
+  sVsyncRunning = false;
+}
 
 IspMode cardIspMode() {
   if (sIspMethod == isp_method::SPI) return IspMode::SPI;

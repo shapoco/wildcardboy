@@ -74,6 +74,8 @@ int main(int argc, char** argv) {
   assert(profileFindPort(p.isp, func::ISP_SCK) == 3);
   assert(profileFindPort(p.lcio, func::TF) == -1);
   assert(!p.useTfCard);
+  assert(p.vsyncHz == VSYNC_HZ_DEFAULT && p.vsyncPulseUs == VSYNC_PULSE_US_DEFAULT);
+  assert(profileFindPort(p.lcio, func::VSYNC) == -1);
   assert(lcioIsValid(0) && lcioIsValid(13) && !lcioIsValid(14) && !lcioIsValid(31) &&
          lcioIsValid(32) && lcioIsValid(47) && !lcioIsValid(48));
   assert(!lcioIsValid(63) && lcioIsValid(64) && lcioIsValid(79) && !lcioIsValid(80));
@@ -254,6 +256,34 @@ int main(int argc, char** argv) {
       patchCrc(chip);
       assert(profileParseFrame(chip.data(), chip.size(), &r, &n) == ProfileError::BAD_VIRT_IO_EXP);
     }
+  }
+
+  // A PicoSystem-style frame (optional fifth argument): 8-bit parallel LCD
+  // (on-card deserializer), push-pull buttons, no vsync member.
+  if (argc > 5) {
+    std::vector<uint8_t> ps = loadHex(argv[5]);
+    CardProfile r;
+    ProfileError se = profileParseFrame(ps.data(), ps.size(), &r, &n);
+    printf("picosystem parse: %s (cbor %u bytes) id=%s isp=%u\n",
+           profileErrorText(se), n, r.id, r.ispMethod);
+    assert(se == ProfileError::OK);
+    assert(strcmp(r.id, "PicoSystem") == 0);
+    assert(!r.useTfCard && !r.useVirtIoExp);
+    for (int i = 0; i <= 11; ++i) assert(r.lcio[i].f == func::LCD);
+    assert(r.lcio[0].m == 41 && r.lcio[2].m == 1 && r.lcio[11].m == 1);
+    // No vsync member: defaults stay, no VSYNC port.
+    assert(r.vsyncHz == VSYNC_HZ_DEFAULT && r.vsyncPulseUs == VSYNC_PULSE_US_DEFAULT);
+    assert(profileFindPort(r.lcio, func::VSYNC) == -1);
+    // Buttons: push-pull + negative (the SDK never enables its pull-ups).
+    assert(r.lcio[32].f == 16 && r.lcio[32].m == 34 && r.lcio[39].m == 34);
+    assert(r.ispMethod == isp_method::USB_MSC);
+    assert(strcmp(r.ispMcu, "rp2040") == 0);
+    assert(profileFindIspOrLcioPort(r, func::RESET) == 13);
+    assert(profileFindIspOrLcioPort(r, func::BOOTSEL) == 12);
+    assert(r.lcdtapPresetId == lcdtap::ConfigPreset::PICOSYSTEM);
+    profileBuildLcdTapConfig(r, &cfg);
+    assert(cfg.busInterface == lcdtap::BusType::PARALLEL);
+    assert(cfg.buffWidth == 240 && cfg.buffHeight == 240);
   }
 
   printf("ok\n");

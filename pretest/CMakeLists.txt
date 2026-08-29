@@ -69,6 +69,7 @@ add_executable(pretest
 )
 
 pico_generate_pio_header(pretest ${LCDTAP_DIR}/example/pico2_common/src/spi_4line_mode0.pio)
+pico_generate_pio_header(pretest ${LCDTAP_DIR}/example/pico2_common/src/parallel_8bit.pio)
 
 pico_generate_pio_header(pretest ${CMAKE_CURRENT_LIST_DIR}/src/lcd8080.pio)
 
@@ -89,6 +90,7 @@ target_link_libraries(pretest
     hardware_i2c
     hardware_irq
     hardware_gpio
+    hardware_pwm
     hardware_pll
     hardware_vreg
     pico_multicore

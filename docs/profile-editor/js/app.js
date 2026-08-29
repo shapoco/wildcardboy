@@ -3,7 +3,8 @@
 import {
   DEFAULT_PROFILE, FUNCTIONS, ISP_FUNCTIONS, ISP_METHODS, MCU_IDS, BUTTONS, MODE,
   LCIO_GPIO_LIST, LCIO_PCA_LIST, LCIO_VIRT_LIST, isPcaLcio, isVirtLcio, lcioHint,
-  ID_MAX_BYTES, NAME_MAX_BYTES, utf8Len, normalize, validate, hasErrors,
+  ID_MAX_BYTES, NAME_MAX_BYTES, VSYNC_HZ_DEFAULT, VSYNC_PULSE_US_DEFAULT,
+  utf8Len, normalize, validate, hasErrors,
 } from './profile.js';
 import { CONFIG_ENTRIES, PRESET_NAMES, effectiveConfig, isEntryEnabled } from './lcdtap_config.js';
 import { build, parse, hex32 } from './eeprom_image.js';
@@ -100,7 +101,7 @@ function buildKeymapTable() {
 
 function buildSettings() {
   buildPortTable($('#t-lcio tbody'), ui.lcio, FUNCTIONS, LCIO_GPIO_LIST);
-  buildPortTable($('#t-lcio-pca tbody'), ui.lcio, FUNCTIONS.filter(f => f.v < 32), LCIO_PCA_LIST);
+  buildPortTable($('#t-lcio-pca tbody'), ui.lcio, FUNCTIONS.filter(f => f.v < 32 && f.v !== 3), LCIO_PCA_LIST);
   buildPortTable($('#t-lcio-virt tbody'), ui.lcio, FUNCTIONS.filter(f => f.v === 0 || f.v === 1 || (f.v >= 16 && f.v <= 27)), LCIO_VIRT_LIST);
   buildPortTable($('#t-isp tbody'), ui.isp, ISP_FUNCTIONS, LCIO_GPIO_LIST);
   $('#f-usetf').addEventListener('change', onUiChange);
@@ -109,6 +110,7 @@ function buildSettings() {
   $('#f-isp-method').append(...ISP_METHODS.map(m => option(m.v, m.name)));
   $('#f-isp-mcu').append(option('', '(not set)'), ...MCU_IDS.map(id => option(id, id)));
   $('#f-isp-mcu').addEventListener('change', onUiChange);
+  for (const id of ['#f-vsync-hz', '#f-vsync-pulse']) $(id).addEventListener('change', onUiChange);
   buildCfgTable();
   buildKeymapTable();
   for (const id of ['#f-id', '#f-name']) $(id).addEventListener('input', onUiChange);
@@ -181,6 +183,13 @@ function renderSettings() {
     renderPorts(ui.lcio, profile.lcio.ports);
     $('#f-usetf').checked = profile.lcio.useTfCard === true;
     $('#f-usevio').checked = profile.lcio.useVirtIoExp === true;
+    {
+      const hasVsync = profile.lcio.ports.some(q => q.f === 3);
+      $('#f-vsync-hz').value = String(profile.vsync ? profile.vsync.hz : VSYNC_HZ_DEFAULT);
+      $('#f-vsync-pulse').value = String(profile.vsync ? profile.vsync.pulseUs : VSYNC_PULSE_US_DEFAULT);
+      $('#f-vsync-hz').disabled = !hasVsync;
+      $('#f-vsync-pulse').disabled = !hasVsync;
+    }
     const presetSel = $('#f-preset');
     presetSel.value = profile.lcdtap.preset;
     if (presetSel.value !== profile.lcdtap.preset) presetSel.value = '';  // unknown preset: show blank
@@ -230,6 +239,14 @@ function readSettings() {
   p.lcio.ports = readPorts(ui.lcio);
   if ($('#f-usetf').checked) p.lcio.useTfCard = true; else delete p.lcio.useTfCard;
   if ($('#f-usevio').checked) p.lcio.useVirtIoExp = true; else delete p.lcio.useVirtIoExp;
+  if (p.lcio.ports.some(q => q.f === 3)) {
+    p.vsync = Object.assign(p.vsync || {}, {
+      hz: Number($('#f-vsync-hz').value) | 0,
+      pulseUs: Number($('#f-vsync-pulse').value) | 0,
+    });
+  } else {
+    delete p.vsync;
+  }
   const presetSel = $('#f-preset');
   if (presetSel.value !== '') p.lcdtap.preset = presetSel.value;
   const cfg = {};

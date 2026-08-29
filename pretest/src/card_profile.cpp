@@ -28,6 +28,7 @@ const char* profileErrorText(ProfileError e) {
     case ProfileError::MISSING_PORT: return "missing port";
     case ProfileError::BAD_KEYMAP: return "bad keymap";
     case ProfileError::BAD_VIRT_IO_EXP: return "bad virtIoExp";
+    case ProfileError::BAD_VSYNC: return "bad vsync";
   }
   return "?";
 }
@@ -112,7 +113,7 @@ static ProfileError decodePorts(QCBORDecodeContext* ctx, const char* label,
 }
 
 static bool knownFunction(uint8_t f) {
-  return f == func::UNUSED || f == func::LCD || f == func::TF ||
+  return f == func::UNUSED || f == func::LCD || f == func::TF || f == func::VSYNC ||
          (f >= func::BTN_FIRST && f <= func::BTN_LAST) ||
          (f >= func::RESET && f <= func::ISP_UART_RX) || f == func::I2C_SLAVE;
 }
@@ -132,6 +133,16 @@ static ProfileError checkPorts(const PortCfg* ports, const char* what, bool ispT
     if (p.f == func::I2C_SLAVE && i != 6 && i != 7) {
       printf("[profile] %s: LCIO%d: I2C slave (48) is fixed to LCIO6/7\n", what, i);
       return ProfileError::BAD_PORT;
+    }
+    if (p.f == func::VSYNC) {
+      if (!lcioIsGpio(i)) {
+        printf("[profile] %s: LCIO%d: VSYNC (3) must be on LCIO0-13\n", what, i);
+        return ProfileError::BAD_PORT;
+      }
+      if ((p.m & mode::DIR_MASK) != mode::OUTPUT) {
+        printf("[profile] %s: LCIO%d: VSYNC (3) must be a push-pull output\n", what, i);
+        return ProfileError::BAD_PORT_MODE;
+      }
     }
     uint8_t dir = p.m & mode::DIR_MASK;
     if (dir != 0 && dir != mode::INPUT && dir != mode::OUTPUT && dir != mode::OPEN_DRAIN) {
@@ -164,11 +175,11 @@ static ProfileError checkPorts(const PortCfg* ports, const char* what, bool ispT
       }
     }
     if (p.f == func::TF) printf("[profile] warning: %s: LCIO%d: TF card I/F is not supported by pretest\n", what, i);
-    // LCD pins: I2C = LCIO2/3, SPI = LCIO0-4 (fixed maps in spec/02); anything
-    // beyond that is the unsupported parallel bus. A virtual port with f = LCD
-    // is the display-reset input (spec/03), not an LCD bus pin.
-    if (p.f == func::LCD && i > 4 && !lcioIsVirt(i)) {
-      printf("[profile] warning: %s: LCIO%d: LCD I/F outside the I2C/SPI pin range (LCIO0-4)\n", what, i);
+    // LCD pins: I2C = LCIO2/3, SPI = LCIO0-4, 8-bit parallel = LCIO0-11
+    // (fixed maps in spec/02). A virtual port with f = LCD is the
+    // display-reset input (spec/03), not an LCD bus pin.
+    if (p.f == func::LCD && i > 11 && !lcioIsVirt(i)) {
+      printf("[profile] warning: %s: LCIO%d: LCD I/F outside the fixed pin ranges (LCIO0-11)\n", what, i);
     }
   }
   return ProfileError::OK;
@@ -177,6 +188,8 @@ static ProfileError checkPorts(const PortCfg* ports, const char* what, bool ispT
 static ProfileError decodeCbor(const uint8_t* cbor, uint32_t len, CardProfile* out) {
   memset(out, 0, sizeof(*out));
   memset(out->keymap, 0xFF, sizeof(out->keymap));
+  out->vsyncHz = VSYNC_HZ_DEFAULT;
+  out->vsyncPulseUs = VSYNC_PULSE_US_DEFAULT;
   out->lcdtapPresetId = lcdtap::ConfigPreset::NUM_PRESETS;
 
   QCBORDecodeContext ctx;
@@ -272,6 +285,18 @@ static ProfileError decodeCbor(const uint8_t* cbor, uint32_t len, CardProfile* o
   }
   QCBORDecode_ExitMap(&ctx);  // lcdtap
 
+  // vsync.hz / vsync.pulseUs (optional; defaults above)
+  QCBORDecode_EnterMapFromMapSZ(&ctx, "vsync");
+  if (optional(&ctx)) {
+    int64_t hz = getIntOr(&ctx, "hz", VSYNC_HZ_DEFAULT);
+    int64_t pulse = getIntOr(&ctx, "pulseUs", VSYNC_PULSE_US_DEFAULT);
+    if (hz < VSYNC_HZ_MIN || hz > VSYNC_HZ_MAX) return ProfileError::BAD_VSYNC;
+    if (pulse < 1 || pulse * hz >= 1000000) return ProfileError::BAD_VSYNC;
+    out->vsyncHz = static_cast<uint16_t>(hz);
+    out->vsyncPulseUs = static_cast<uint32_t>(pulse);
+    QCBORDecode_ExitMap(&ctx);
+  }
+
   // isp
   QCBORDecode_EnterMapFromMapSZ(&ctx, "isp");
   if (optional(&ctx)) {
@@ -330,6 +355,18 @@ static ProfileError checkProfile(CardProfile* p) {
   e = checkPorts(p->isp, "isp", true);
   if (e != ProfileError::OK) return e;
 
+  // At most one VSYNC (3) port (spec/03).
+  {
+    int vsyncCount = 0;
+    for (int i = 0; i < NUM_LCIO; ++i) {
+      if (p->lcio[i].f == func::VSYNC && (p->lcio[i].m & mode::DIR_MASK) != 0) vsyncCount++;
+    }
+    if (vsyncCount > 1) {
+      printf("[profile] lcio: multiple VSYNC (3) ports\n");
+      return ProfileError::BAD_VSYNC;
+    }
+  }
+
   // Preset name -> id (exact match against CONFIG_PRESET_NAMES).
   for (int i = 0; i < static_cast<int>(lcdtap::ConfigPreset::NUM_PRESETS); ++i) {
     if (strcmp(lcdtap::CONFIG_PRESET_NAMES[i], p->lcdtapPreset) == 0) {
@@ -345,8 +382,9 @@ static ProfileError checkProfile(CardProfile* p) {
   lcdtap::LcdTapConfig cfg;
   profileBuildLcdTapConfig(*p, &cfg);
   if (cfg.busInterface != lcdtap::BusType::I2C &&
-      cfg.busInterface != lcdtap::BusType::SPI_4LINE) {
-    printf("[profile] LcdTap bus %s is not supported by pretest (I2C / 4-line SPI only)\n",
+      cfg.busInterface != lcdtap::BusType::SPI_4LINE &&
+      cfg.busInterface != lcdtap::BusType::PARALLEL) {
+    printf("[profile] LcdTap bus %s is not supported by pretest (I2C / 4-line SPI / 8-bit parallel only)\n",
            lcdtap::BUS_NAMES[static_cast<int>(cfg.busInterface)]);
     return ProfileError::UNSUPPORTED_LCD_BUS;
   }

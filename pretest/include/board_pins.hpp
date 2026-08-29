@@ -89,7 +89,9 @@ static constexpr uint PIN_LCUSB_DM = 31;
 static constexpr uint PIO_USB_INDEX = 1;
 
 // System clock (sys_clock.hpp). Peripheral dividers are derived from it.
-static constexpr uint32_t SYS_CLOCK_HZ = 288'000'000;
+// 312 MHz gives the LcdTap SPI capture more margin against the 62.5 MHz
+// SCLK of PicoSystem cards (spi_4line_mode0.pio worst case = clk_sys / 4).
+static constexpr uint32_t SYS_CLOCK_HZ = 312'000'000;
 
 // TF card layout (see spec/05_tf_card.md).
 static constexpr const char* CARDS_DIR = "/WCB/Cards";

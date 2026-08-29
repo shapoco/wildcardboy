@@ -31,11 +31,18 @@ static constexpr int NUM_BUTTONS = 12;
 static constexpr int ID_MAX = 16;
 static constexpr int NAME_MAX = 64;
 
+// LCD VSYNC output (function 3): host-generated free-running pulse (spec/03).
+static constexpr int VSYNC_HZ_MIN = 20;
+static constexpr int VSYNC_HZ_MAX = 1000;
+static constexpr int VSYNC_HZ_DEFAULT = 60;
+static constexpr int VSYNC_PULSE_US_DEFAULT = 1000;
+
 // Port function numbers.
 namespace func {
 static constexpr uint8_t UNUSED = 0;
 static constexpr uint8_t LCD = 1;
 static constexpr uint8_t TF = 2;
+static constexpr uint8_t VSYNC = 3;  // LCD VSYNC output (host-generated pulse)
 static constexpr uint8_t BTN_FIRST = 16;  // 16 + button number (0..11)
 static constexpr uint8_t BTN_LAST = 27;
 static constexpr uint8_t RESET = 32;
@@ -93,6 +100,8 @@ struct CardProfile {
   bool useVirtIoExp;       // host emulates an I/O expander on LCIO6/7 (i2c1 slave)
   char virtIoExpChip[17];  // virtIoExp.chip ("mcp23017" / "pca9555"); empty = member absent
   uint8_t virtIoExpAddr;   // virtIoExp.addr (I2C slave address)
+  uint16_t vsyncHz;        // vsync.hz [Hz] (defaults apply even without the member)
+  uint32_t vsyncPulseUs;   // vsync.pulseUs [us]
   char lcdtapPreset[32];
   lcdtap::ConfigPreset lcdtapPresetId;
   struct CfgOverride {
@@ -123,6 +132,7 @@ enum class ProfileError : uint8_t {
   MISSING_PORT,      // a required port (e.g. RESET/BOOTSEL for USB ISP) is absent
   BAD_KEYMAP,
   BAD_VIRT_IO_EXP,   // virtIoExp missing / unsupported chip / bad addr / non-SPI LCD
+  BAD_VSYNC,         // vsync member out of range / multiple VSYNC ports
 };
 
 const char* profileErrorText(ProfileError e);

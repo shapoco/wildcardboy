@@ -1,15 +1,17 @@
-// WildCardBoy pretest firmware: logic card bring-up (TinyJoyPad / PicoPad1 / PicoPad2 / ESPboy).
+// WildCardBoy pretest firmware: logic card bring-up
+// (TinyJoyPad / PicoPad1 / PicoPad2 / ESPboy / XiamoconRP / PicoSystem).
 //
 //   Detect : the card's profile EEPROM must ACK 3 times (200 ms apart), then
 //            the profile is read and validated (length / CRC32 / CBOR).
 //   Stopped: RESET asserted, LCTF_ENAX high. Entered after detection (the
 //            card auto-starts only when it was present at boot).
 //   Running: RESET released; LcdTap captures the card's LCD stream on core 1
-//            (I2C or 4-line SPI) and core 0 pushes the changed lines to the
+//            (I2C, 4-line SPI or 8-bit parallel) and core 0 pushes the changed lines to the
 //            host LCD; host keys go to the card's key lines (GPIO, the card
 //            PCA9555, or the virtual MCP23017 emulated on i2c1 when the
 //            profile sets useVirtIoExp); with useTfCard the TF card is
-//            handed to the card.
+//            handed to the card; a profile VSYNC port carries a
+//            free-running PWM pulse while the card runs.
 //   HOME opens the system menu: Start/Stop card, Apps (program the card MCU
 //   from the TF card: AVR ISP over SPI, UF2 over USB MSC, or the Espressif
 //   serial bootloader over UART), Profile (write a profile .hex into the
@@ -22,6 +24,7 @@
 #include <cstring>
 
 #include "hardware/clocks.h"
+#include "hardware/uart.h"
 #include "pico/stdlib.h"
 #include "tusb.h"
 
@@ -87,6 +90,54 @@ static inline uint32_t nowMs() { return to_ms_since_boot(get_absolute_time()); }
 static void lcdtapLog(void*, const char* msg) { printf("[lcdtap] %s\n", msg); }
 
 //-----------------------------------------------------------------------------
+// Card debug UART (LCIO11 -> uart1 RX, 115200 8N1)
+//-----------------------------------------------------------------------------
+// Debug aid: if the profile leaves LCIO11 unused, listen on it while the card
+// runs and forward complete lines to the debug console with a [carduart]
+// prefix. Lets a card dump diagnostics with no extra hardware (e.g. the
+// PicoSystem fault-dump builds with their UART TX wired to LCIO11).
+// uart1 is also used by the ESP UART ISP, but only while the card is stopped,
+// so the two never overlap.
+static bool gCardUartOn = false;
+static char gCardUartLine[97];
+static uint32_t gCardUartLen = 0;
+
+static void cardUartStart(const CardProfile& p) {
+  if (gCardUartOn) return;
+  if (p.lcio[11].f != 0 || p.lcio[11].m != 0) return;  // LCIO11 owned by the profile
+  uart_init(uart1, 115200);
+  gpio_pull_up(11);  // idle-high while the card side is Hi-Z
+  gpio_set_function(11, UART_FUNCSEL_NUM(uart1, 11));
+  gCardUartLen = 0;
+  gCardUartOn = true;
+  printf("[carduart] listening on LCIO11 (115200 8N1)\n");
+}
+
+static void cardUartStop() {
+  if (!gCardUartOn) return;
+  uart_deinit(uart1);
+  gpio_init(11);  // back to Hi-Z
+  gpio_disable_pulls(11);
+  gCardUartOn = false;
+}
+
+static void cardUartPoll() {
+  if (!gCardUartOn) return;
+  while (uart_is_readable(uart1)) {
+    char c = uart_getc(uart1);
+    bool eol = (c == '\n' || c == '\r');
+    if (!eol && gCardUartLen < sizeof(gCardUartLine) - 1) {
+      gCardUartLine[gCardUartLen++] = (c >= 32 && c < 127) ? c : '.';
+    }
+    if ((eol || gCardUartLen >= sizeof(gCardUartLine) - 1) && gCardUartLen) {
+      gCardUartLine[gCardUartLen] = 0;
+      printf("[carduart] %s\n", gCardUartLine);
+      gCardUartLen = 0;
+    }
+  }
+}
+
+//-----------------------------------------------------------------------------
 // Card lifecycle
 //-----------------------------------------------------------------------------
 
@@ -149,9 +200,11 @@ static bool cardStart() {
   // Release the MCU; mirror the reset into LcdTap.
   core1Call(Core1Cmd::LCDTAP_RESET_ASSERT);
   cardKeysRelease();
+  cardVsyncStart();
   cardResetRelease();
   core1Call(Core1Cmd::LCDTAP_RESET_RELEASE);
   gCardState = CardState::RUNNING;
+  cardUartStart(gProfile);
   return true;
 }
 
@@ -160,6 +213,8 @@ static void cardStop() {
   if (gCardState != CardState::RUNNING) return;
   cardResetAssert();
   cardKeysRelease();
+  cardVsyncStop();
+  cardUartStop();
   if (gProfile.useVirtIoExp) vioDeinit();
   core1Call(Core1Cmd::LCDTAP_DETACH);
   delete gTap;
@@ -412,7 +467,7 @@ static void printStats(uint16_t keys, bool keysOk, uint32_t loopsPerSec) {
 // main
 //-----------------------------------------------------------------------------
 int main() {
-  sysClockInit288();
+  sysClockInit312();
 
   // TinyUSB device stack (CDC for stdio) is ours in the dual-role build;
   // pico_stdio_usb expects it to be up before stdio_init_all().
@@ -598,6 +653,9 @@ int main() {
     if (gCardState == CardState::RUNNING && !gUi.isVisible()) {
       gPump.process(PUMP_MAX_LINES_PER_CALL);
     }
+
+    //--- card debug UART -> console ---------------------------------------
+    cardUartPoll();
 
     //--- periodic stats -----------------------------------------------------
     loops++;

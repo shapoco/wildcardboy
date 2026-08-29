@@ -36,6 +36,14 @@ bool cardHasBootsel();
 void cardBootselAssert();
 void cardBootselRelease();
 
+// LCD VSYNC output (function 3): free-running PWM pulse from the profile's
+// vsync settings (spec/04). Start before releasing RESET, stop after
+// asserting it; while stopped the pin idles at the non-pulse level. No-ops
+// when the profile has no VSYNC port.
+bool cardHasVsync();
+void cardVsyncStart();
+void cardVsyncStop();
+
 IspMode cardIspMode();
 const char* cardIspMcu();  // isp.mcu (may be an empty string)
 bool cardUseTfCard();
