@@ -33,9 +33,9 @@ const $ = s => document.querySelector(s);
 const fire = (el, type) => el.dispatchEvent(new window.Event(type, { bubbles: true }));
 const json = () => JSON.parse($('#json').value);
 
-// 1. Initial render equals the built-in default (TinyJoyPad).
+// 1. Initial render equals the built-in default (TinyJoypad).
 assert.deepEqual(json(), normalize(DEFAULT_PROFILE));
-assert.equal($('#f-id').value, 'TinyJoyPad');
+assert.equal($('#f-id').value, 'TinyJoypad');
 assert.equal($('#f-preset').value, 'Tinyjoypad');
 assert.equal($('#t-lcio tbody').children.length, 14);
 assert.equal($('#t-lcio-pca tbody').children.length, 16);

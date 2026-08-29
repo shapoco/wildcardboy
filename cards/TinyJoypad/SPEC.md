@@ -1,10 +1,10 @@
-# TinyJoyPad カード
+# TinyJoypad カード
 
-TinyJoyPad カードは、ATtiny85 を搭載した小型ゲーム機「Tinyjoypad」の CPU 周辺回路を WildCardBoy のロジックカードとして実装したもの。
+TinyJoypad カードは、ATtiny85 を搭載した小型ゲーム機「Tinyjoypad」の CPU 周辺回路を WildCardBoy のロジックカードとして実装したもの。
 
 ## カードID
 
-`TinyJoyPad`
+`TinyJoypad`
 
 ## カード I/F
 

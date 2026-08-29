@@ -1,6 +1,6 @@
 # pretest — ロジックカード動作テスト用ファームウェア
 
-本体ハードウェアの事前テスト用の仮ファームウェア。TinyJoyPad カード (ATtiny85 / Tinyjoypad 互換)、
+本体ハードウェアの事前テスト用の仮ファームウェア。TinyJoypad カード (ATtiny85 / Tinyjoypad 互換)、
 PicoPad1/PicoPad2 カード (Raspberry Pi Pico / Pico 2、PicoPad 互換)、ESPboy カード (ESP8266、ESPboy 互換) を対象とする。
 
 システムクロックは 288 MHz (`src/sys_clock.cpp`、Pico-PIO-USB の要求する 12 MHz の倍数で、LcdTap の SPI 受信が 62.5 MHz に追従できる)。
@@ -78,7 +78,7 @@ CS 固定 Low / RST 無配線の SPI LCD カード向けに、ホストのカー
 CBOR のデコードには [QCBOR](https://github.com/laurencelundblade/QCBOR) (`submodule/QCBOR`) を使用。
 pretest で未対応の項目: LCD バスが 3 線 SPI / パラレル (プロファイル無効として扱う)、動作中の抜去検出、
 UART ISP の LCIO10/11 以外への割り当て (ハード UART が使えないため)。
-ホスト側テスト: `test_host/build.sh` (`cards/TinyJoyPad` / `PicoPad1` / `ESPboy` の profile.hex のパースとエラー経路)。
+ホスト側テスト: `test_host/build.sh` (`cards/TinyJoypad` / `PicoPad1` / `ESPboy` の profile.hex のパースとエラー経路)。
 
 ## ビルド
 

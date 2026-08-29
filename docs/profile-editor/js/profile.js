@@ -89,7 +89,7 @@ export function lcioHint(i) {
 
 export const DEFAULT_PROFILE = {
   format: FORMAT,
-  id: 'TinyJoyPad',
+  id: 'TinyJoypad',
   name: 'Tinyjoypad',
   lcio: {
     ports: [

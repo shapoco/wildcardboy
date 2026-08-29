@@ -1,4 +1,4 @@
-// Host-side test of card_profile: parses cards/TinyJoyPad/profile.hex and checks
+// Host-side test of card_profile: parses cards/TinyJoypad/profile.hex and checks
 // the error paths. Build/run with test_host/build.sh.
 #include <cassert>
 #include <cstdio>
@@ -41,7 +41,7 @@ static void patchCrc(std::vector<uint8_t>& frame) {
 }
 
 int main(int argc, char** argv) {
-  const char* hexPath = argc > 1 ? argv[1] : "../../cards/TinyJoyPad/profile.hex";
+  const char* hexPath = argc > 1 ? argv[1] : "../../cards/TinyJoypad/profile.hex";
   std::vector<uint8_t> frame = loadHex(hexPath);
   printf("frame: %zu bytes\n", frame.size());
 
@@ -50,7 +50,7 @@ int main(int argc, char** argv) {
   ProfileError e = profileParseFrame(frame.data(), frame.size(), &p, &n);
   printf("parse: %s (cbor %u bytes)\n", profileErrorText(e), n);
   assert(e == ProfileError::OK);
-  assert(strcmp(p.id, "TinyJoyPad") == 0);
+  assert(strcmp(p.id, "TinyJoypad") == 0);
   assert(strcmp(p.name, "Tinyjoypad") == 0);
   assert(p.lcdtapPresetId == lcdtap::ConfigPreset::TINYJOYPAD);
   assert(p.lcdtapCfgCount == 0);

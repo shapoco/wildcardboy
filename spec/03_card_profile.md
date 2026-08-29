@@ -240,4 +240,4 @@ CBOR の符号化は次の制約に従う (ホスト側パーサの簡略化の�
 CRC32 は zlib 互換の CRC-32 (多項式 0x04C11DB7 反転形 0xEDB88320、初期値 0xFFFFFFFF、最終 XOR 0xFFFFFFFF) とする。
 CBOR オブジェクトは高々数 kB を想定しており、ホストは全体を SRAM に読み込んで CRC を検証した後にパースする。
 
-サンプル: [cards/TinyJoyPad/profile.json](../cards/TinyJoyPad/profile.json)。編集ツール: [docs/profile-editor](../docs/profile-editor/)。
+サンプル: [cards/TinyJoypad/profile.json](../cards/TinyJoypad/profile.json)。編集ツール: [docs/profile-editor](../docs/profile-editor/)。
