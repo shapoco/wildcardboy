@@ -3,3 +3,10 @@
 build/
 tmp.*/
 tmp.*
+
+# for KiCad
+*-backups/
+*.kicad_pcb-bak
+*.kicad_sch-bak
+*.kicad_prl
+fp-info-cache
