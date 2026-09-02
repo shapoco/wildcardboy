@@ -25231,7 +25231,7 @@
 		)
 		(uuid "2b68d29a-6ada-4eba-afe8-acd57ec7bd8c")
 	)
-	(label "LCALG0"
+	(label "LCA0"
 		(at 360.68 210.82 0)
 		(effects
 			(font
@@ -26551,7 +26551,7 @@
 		)
 		(uuid "f7926c83-e3f9-4500-94c9-62c4b3d52c5d")
 	)
-	(label "LCALG0"
+	(label "LCA0"
 		(at 93.98 223.52 0)
 		(effects
 			(font
