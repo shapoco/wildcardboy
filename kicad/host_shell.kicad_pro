@@ -217,6 +217,7 @@
       "footprint_filter": "ignore",
       "footprint_link_issues": "warning",
       "four_way_junction": "ignore",
+      "global_label_dangling": "warning",
       "ground_pin_not_ground": "warning",
       "hier_label_mismatch": "error",
       "isolated_pin_label": "warning",
@@ -290,10 +291,14 @@
   },
   "pcbnew": {
     "last_paths": {
+      "gencad": "",
       "idf": "",
       "netlist": "",
       "plot": "",
+      "pos_files": "",
       "specctra_dsn": "",
+      "step": "",
+      "svg": "",
       "vrml": ""
     },
     "page_layout_descr_file": ""
@@ -389,7 +394,7 @@
           "group_by": false,
           "label": "LCSC",
           "name": "LCSC",
-          "show": false
+          "show": true
         },
         {
           "group_by": false,
@@ -470,9 +475,17 @@
     "meta": {
       "version": 1
     },
+    "net_format_name": "",
     "page_layout_descr_file": "",
     "plot_directory": "",
     "reuse_designators": true,
+    "space_save_all_events": true,
+    "spice_current_sheet_as_root": false,
+    "spice_external_command": "spice \"%I\"",
+    "spice_model_current_sheet_as_root": true,
+    "spice_save_all_currents": false,
+    "spice_save_all_dissipations": false,
+    "spice_save_all_voltages": false,
     "subpart_first_id": 65,
     "subpart_id_separator": 0,
     "top_level_sheets": [
@@ -482,7 +495,7 @@
         "uuid": "5e0c6c36-a1dc-429a-ac71-852781b1edf9"
       }
     ],
-    "used_designators": "#PWR1-2,#PWR4,#PWR43-44,#PWR113,#PWR118-124,#PWR128-152,L4,C22-24,C36,C49-61,J8,R13-16,R19-20,R30-32,R34,R56-71,JP1-4,TP14-18,U4,U12-14,Q1-3,Q5-7,RV1",
+    "used_designators": "U6,D7-8,#PWR7,#PWR14,#PWR23,#PWR55,#PWR57,#PWR59-60,#PWR65-67,#PWR84,#PWR121,#PWR124,#PWR165-173,C27,C69,TP22,TP40-51,#FLG12,R38,R43,R45,R73-74,J5,J9-11,SW18",
     "variants": []
   },
   "sheets": [
