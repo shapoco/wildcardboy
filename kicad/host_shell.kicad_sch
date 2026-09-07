@@ -30426,7 +30426,7 @@
 		(in_bom no)
 		(on_board yes)
 		(in_pos_files yes)
-		(dnp no)
+		(dnp yes)
 		(uuid "0a5f2bc0-98bd-4679-bfa9-2ba33e15a0c2")
 		(property "Reference" "J4"
 			(at 393.446 18.796 0)
