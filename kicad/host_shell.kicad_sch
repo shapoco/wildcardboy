@@ -8015,7 +8015,7 @@
 			(in_bom yes)
 			(on_board yes)
 			(in_pos_files yes)
-			(duplicate_pin_numbers_are_jumpers no)
+			(duplicate_pin_numbers_are_jumpers yes)
 			(property "Reference" "SW"
 				(at -1.27 4.826 0)
 				(show_name no)
@@ -8229,7 +8229,7 @@
 			)
 			(embedded_fonts no)
 		)
-		(symbol "SKRPACE010_12"
+		(symbol "SKRPACE010_10"
 			(pin_numbers
 				(hide yes)
 			)
@@ -8241,7 +8241,7 @@
 			(in_bom yes)
 			(on_board yes)
 			(in_pos_files yes)
-			(duplicate_pin_numbers_are_jumpers no)
+			(duplicate_pin_numbers_are_jumpers yes)
 			(property "Reference" "SW"
 				(at -1.27 4.826 0)
 				(show_name no)
@@ -8307,7 +8307,7 @@
 					)
 				)
 			)
-			(symbol "SKRPACE010_12_0_1"
+			(symbol "SKRPACE010_10_0_1"
 				(circle
 					(center -1.524 0)
 					(radius 0.508)
@@ -8379,7 +8379,7 @@
 					)
 				)
 			)
-			(symbol "SKRPACE010_12_1_1"
+			(symbol "SKRPACE010_10_1_1"
 				(pin passive line
 					(at -2.54 0 0)
 					(length 0.508)
@@ -8455,7 +8455,7 @@
 			)
 			(embedded_fonts no)
 		)
-		(symbol "SKRPACE010_13"
+		(symbol "SKRPACE010_11"
 			(pin_numbers
 				(hide yes)
 			)
@@ -8467,7 +8467,7 @@
 			(in_bom yes)
 			(on_board yes)
 			(in_pos_files yes)
-			(duplicate_pin_numbers_are_jumpers no)
+			(duplicate_pin_numbers_are_jumpers yes)
 			(property "Reference" "SW"
 				(at -1.27 4.826 0)
 				(show_name no)
@@ -8533,7 +8533,7 @@
 					)
 				)
 			)
-			(symbol "SKRPACE010_13_0_1"
+			(symbol "SKRPACE010_11_0_1"
 				(circle
 					(center -1.524 0)
 					(radius 0.508)
@@ -8605,459 +8605,7 @@
 					)
 				)
 			)
-			(symbol "SKRPACE010_13_1_1"
-				(pin passive line
-					(at -2.54 0 0)
-					(length 0.508)
-					(name "1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at -2.54 -1.27 0)
-					(length 0.508)
-					(name "1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 2.54 0 180)
-					(length 0.508)
-					(name "2"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "2"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 2.54 -1.27 180)
-					(length 0.508)
-					(name "2"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "2"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-			)
-			(embedded_fonts no)
-		)
-		(symbol "SKRPACE010_14"
-			(pin_numbers
-				(hide yes)
-			)
-			(pin_names
-				(offset 1.016)
-				(hide yes)
-			)
-			(exclude_from_sim no)
-			(in_bom yes)
-			(on_board yes)
-			(in_pos_files yes)
-			(duplicate_pin_numbers_are_jumpers no)
-			(property "Reference" "SW"
-				(at -1.27 4.826 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify left)
-				)
-			)
-			(property "Value" "SKRPACE010"
-				(at 0 3.048 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Footprint" ""
-				(at 0 5.08 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Datasheet" ""
-				(at 0 5.08 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Description" "Push button switch, generic, two pins"
-				(at -0.254 -4.572 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "ki_keywords" "switch normally-open pushbutton push-button"
-				(at 0 0 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(symbol "SKRPACE010_14_0_1"
-				(circle
-					(center -1.524 0)
-					(radius 0.508)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy -1.524 -0.508) (xy -1.524 -1.27) (xy -2.032 -1.27)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy 0 1.016) (xy 0 2.032)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(circle
-					(center 1.524 0)
-					(radius 0.508)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy 1.524 -0.508) (xy 1.524 -1.27) (xy 2.032 -1.27)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy 2.032 1.016) (xy -2.032 1.016)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-			)
-			(symbol "SKRPACE010_14_1_1"
-				(pin passive line
-					(at -2.54 0 0)
-					(length 0.508)
-					(name "1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at -2.54 -1.27 0)
-					(length 0.508)
-					(name "1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 2.54 0 180)
-					(length 0.508)
-					(name "2"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "2"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 2.54 -1.27 180)
-					(length 0.508)
-					(name "2"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "2"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-			)
-			(embedded_fonts no)
-		)
-		(symbol "SKRPACE010_15"
-			(pin_numbers
-				(hide yes)
-			)
-			(pin_names
-				(offset 1.016)
-				(hide yes)
-			)
-			(exclude_from_sim no)
-			(in_bom yes)
-			(on_board yes)
-			(in_pos_files yes)
-			(duplicate_pin_numbers_are_jumpers no)
-			(property "Reference" "SW"
-				(at -1.27 4.826 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify left)
-				)
-			)
-			(property "Value" "SKRPACE010"
-				(at 0 3.048 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Footprint" ""
-				(at 0 5.08 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Datasheet" ""
-				(at 0 5.08 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Description" "Push button switch, generic, two pins"
-				(at -0.254 -4.572 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "ki_keywords" "switch normally-open pushbutton push-button"
-				(at 0 0 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(symbol "SKRPACE010_15_0_1"
-				(circle
-					(center -1.524 0)
-					(radius 0.508)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy -1.524 -0.508) (xy -1.524 -1.27) (xy -2.032 -1.27)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy 0 1.016) (xy 0 2.032)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(circle
-					(center 1.524 0)
-					(radius 0.508)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy 1.524 -0.508) (xy 1.524 -1.27) (xy 2.032 -1.27)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy 2.032 1.016) (xy -2.032 1.016)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-			)
-			(symbol "SKRPACE010_15_1_1"
+			(symbol "SKRPACE010_11_1_1"
 				(pin passive line
 					(at -2.54 0 0)
 					(length 0.508)
@@ -9145,7 +8693,7 @@
 			(in_bom yes)
 			(on_board yes)
 			(in_pos_files yes)
-			(duplicate_pin_numbers_are_jumpers no)
+			(duplicate_pin_numbers_are_jumpers yes)
 			(property "Reference" "SW"
 				(at -1.27 4.826 0)
 				(show_name no)
@@ -9371,7 +8919,7 @@
 			(in_bom yes)
 			(on_board yes)
 			(in_pos_files yes)
-			(duplicate_pin_numbers_are_jumpers no)
+			(duplicate_pin_numbers_are_jumpers yes)
 			(property "Reference" "SW"
 				(at -1.27 4.826 0)
 				(show_name no)
@@ -9597,7 +9145,7 @@
 			(in_bom yes)
 			(on_board yes)
 			(in_pos_files yes)
-			(duplicate_pin_numbers_are_jumpers no)
+			(duplicate_pin_numbers_are_jumpers yes)
 			(property "Reference" "SW"
 				(at -1.27 4.826 0)
 				(show_name no)
@@ -9823,7 +9371,7 @@
 			(in_bom yes)
 			(on_board yes)
 			(in_pos_files yes)
-			(duplicate_pin_numbers_are_jumpers no)
+			(duplicate_pin_numbers_are_jumpers yes)
 			(property "Reference" "SW"
 				(at -1.27 4.826 0)
 				(show_name no)
@@ -10275,7 +9823,7 @@
 			(in_bom yes)
 			(on_board yes)
 			(in_pos_files yes)
-			(duplicate_pin_numbers_are_jumpers no)
+			(duplicate_pin_numbers_are_jumpers yes)
 			(property "Reference" "SW"
 				(at -1.27 4.826 0)
 				(show_name no)
@@ -10489,6 +10037,232 @@
 			)
 			(embedded_fonts no)
 		)
+		(symbol "SKRPACE010_8"
+			(pin_numbers
+				(hide yes)
+			)
+			(pin_names
+				(offset 1.016)
+				(hide yes)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers yes)
+			(property "Reference" "SW"
+				(at -1.27 4.826 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left)
+				)
+			)
+			(property "Value" "SKRPACE010"
+				(at 0 3.048 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" "Push button switch, generic, two pins"
+				(at -0.254 -4.572 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_keywords" "switch normally-open pushbutton push-button"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "SKRPACE010_8_0_1"
+				(circle
+					(center -1.524 0)
+					(radius 0.508)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy -1.524 -0.508) (xy -1.524 -1.27) (xy -2.032 -1.27)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 0 1.016) (xy 0 2.032)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(circle
+					(center 1.524 0)
+					(radius 0.508)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 1.524 -0.508) (xy 1.524 -1.27) (xy 2.032 -1.27)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 2.032 1.016) (xy -2.032 1.016)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "SKRPACE010_8_1_1"
+				(pin passive line
+					(at -2.54 0 0)
+					(length 0.508)
+					(name "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at -2.54 -1.27 0)
+					(length 0.508)
+					(name "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 2.54 0 180)
+					(length 0.508)
+					(name "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 2.54 -1.27 180)
+					(length 0.508)
+					(name "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
 		(symbol "SKRPACE010_9"
 			(pin_numbers
 				(hide yes)
@@ -10501,7 +10275,7 @@
 			(in_bom yes)
 			(on_board yes)
 			(in_pos_files yes)
-			(duplicate_pin_numbers_are_jumpers no)
+			(duplicate_pin_numbers_are_jumpers yes)
 			(property "Reference" "SW"
 				(at -1.27 4.826 0)
 				(show_name no)
@@ -17008,6 +16782,232 @@
 			)
 			(embedded_fonts no)
 		)
+		(symbol "shpc_mechanical:SKRPACE010"
+			(pin_numbers
+				(hide yes)
+			)
+			(pin_names
+				(offset 1.016)
+				(hide yes)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers yes)
+			(property "Reference" "SW"
+				(at -1.27 4.826 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left)
+				)
+			)
+			(property "Value" "SKRPACE010"
+				(at 0 3.048 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" ""
+				(at 0 5.08 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" "Push button switch, generic, two pins"
+				(at -0.254 -4.572 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_keywords" "switch normally-open pushbutton push-button"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "SKRPACE010_0_1"
+				(circle
+					(center -1.524 0)
+					(radius 0.508)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy -1.524 -0.508) (xy -1.524 -1.27) (xy -2.032 -1.27)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 0 1.016) (xy 0 2.032)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(circle
+					(center 1.524 0)
+					(radius 0.508)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 1.524 -0.508) (xy 1.524 -1.27) (xy 2.032 -1.27)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 2.032 1.016) (xy -2.032 1.016)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "SKRPACE010_1_1"
+				(pin passive line
+					(at -2.54 0 0)
+					(length 0.508)
+					(name "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at -2.54 -1.27 0)
+					(length 0.508)
+					(name "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 2.54 0 180)
+					(length 0.508)
+					(name "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 2.54 -1.27 180)
+					(length 0.508)
+					(name "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
 	)
 	(text "SPEAKER"
 		(exclude_from_sim no)
@@ -18232,16 +18232,6 @@
 	)
 	(wire
 		(pts
-			(xy 248.92 124.46) (xy 248.92 127)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "04451fff-0d47-4c89-9f26-67df061197ce")
-	)
-	(wire
-		(pts
 			(xy 339.09 44.45) (xy 337.82 44.45)
 		)
 		(stroke
@@ -18862,7 +18852,7 @@
 	)
 	(wire
 		(pts
-			(xy 241.3 127) (xy 245.11 127)
+			(xy 242.57 124.46) (xy 247.65 124.46)
 		)
 		(stroke
 			(width 0)
@@ -19142,7 +19132,7 @@
 	)
 	(wire
 		(pts
-			(xy 245.11 121.92) (xy 248.92 121.92)
+			(xy 247.65 121.92) (xy 248.92 121.92)
 		)
 		(stroke
 			(width 0)
@@ -20182,6 +20172,16 @@
 	)
 	(wire
 		(pts
+			(xy 245.11 127) (xy 248.92 127)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "40a776aa-e78d-4fe1-accb-8f8061ff64b0")
+	)
+	(wire
+		(pts
 			(xy 127 134.62) (xy 127 133.35)
 		)
 		(stroke
@@ -20829,6 +20829,16 @@
 			(type default)
 		)
 		(uuid "545d7bee-002e-4011-8c6d-2e42d430873f")
+	)
+	(wire
+		(pts
+			(xy 242.57 127) (xy 241.3 127)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "546b954f-9cea-4c26-80f3-ffe4dbc245b5")
 	)
 	(wire
 		(pts
@@ -21562,6 +21572,16 @@
 	)
 	(wire
 		(pts
+			(xy 245.11 121.92) (xy 245.11 127)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "6f32e160-5d5c-4dfe-8e57-ac89eb363e67")
+	)
+	(wire
+		(pts
 			(xy 58.42 40.64) (xy 48.26 40.64)
 		)
 		(stroke
@@ -21969,16 +21989,6 @@
 			(type default)
 		)
 		(uuid "79b547f2-3996-4ca9-980e-fe179e189dde")
-	)
-	(wire
-		(pts
-			(xy 241.3 124.46) (xy 248.92 124.46)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "79efe774-6d90-40e8-ab80-f2c4b3a5dcd7")
 	)
 	(wire
 		(pts
@@ -23442,6 +23452,16 @@
 	)
 	(wire
 		(pts
+			(xy 241.3 121.92) (xy 245.11 121.92)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "9f15fa4a-a5bc-469c-88d9-f01170895169")
+	)
+	(wire
+		(pts
 			(xy 31.75 123.19) (xy 35.56 123.19)
 		)
 		(stroke
@@ -24052,16 +24072,6 @@
 	)
 	(wire
 		(pts
-			(xy 241.3 121.92) (xy 241.3 124.46)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "b1003113-bfb5-4125-9e45-7707fb9229fe")
-	)
-	(wire
-		(pts
 			(xy 132.08 265.43) (xy 132.08 266.7)
 		)
 		(stroke
@@ -24419,6 +24429,16 @@
 			(type default)
 		)
 		(uuid "bc1603b2-0ce3-4d29-aee8-94072d05538e")
+	)
+	(wire
+		(pts
+			(xy 242.57 124.46) (xy 242.57 127)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "bc5b567c-ac3f-4888-98b9-284868ade37d")
 	)
 	(wire
 		(pts
@@ -24829,16 +24849,6 @@
 			(type default)
 		)
 		(uuid "c9e6f132-2ecf-46ce-a30f-6ca014c3efa4")
-	)
-	(wire
-		(pts
-			(xy 245.11 127) (xy 245.11 121.92)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "ca254d16-8479-47f9-9533-21aba8da14dd")
 	)
 	(wire
 		(pts
@@ -25669,6 +25679,16 @@
 			(type default)
 		)
 		(uuid "e1f5105d-6ee7-4fb3-9957-a3682eb7137c")
+	)
+	(wire
+		(pts
+			(xy 247.65 121.92) (xy 247.65 124.46)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "e2a1cf8c-8b9a-4ec0-9803-7ed3abe65c58")
 	)
 	(wire
 		(pts
@@ -33773,7 +33793,7 @@
 		)
 	)
 	(symbol
-		(lib_name "SKRPACE010_15")
+		(lib_name "SKRPACE010_4")
 		(lib_id "shpc_mechanical:SKRPACE010")
 		(at 341.63 38.1 0)
 		(unit 1)
@@ -34747,7 +34767,7 @@
 		)
 	)
 	(symbol
-		(lib_name "SKRPACE010_13")
+		(lib_name "SKRPACE010_8")
 		(lib_id "shpc_mechanical:SKRPACE010")
 		(at 341.63 48.26 0)
 		(unit 1)
@@ -36448,7 +36468,7 @@
 		)
 	)
 	(symbol
-		(lib_name "SKRPACE010_4")
+		(lib_name "SKRPACE010_3")
 		(lib_id "shpc_mechanical:SKRPACE010")
 		(at 314.96 33.02 0)
 		(unit 1)
@@ -39154,7 +39174,6 @@
 		)
 	)
 	(symbol
-		(lib_name "SKRPACE010_3")
 		(lib_id "shpc_mechanical:SKRPACE010")
 		(at 314.96 38.1 0)
 		(unit 1)
@@ -43893,7 +43912,7 @@
 		)
 	)
 	(symbol
-		(lib_name "SKRPACE010_7")
+		(lib_name "SKRPACE010_11")
 		(lib_id "shpc_mechanical:SKRPACE010")
 		(at 341.63 66.04 0)
 		(unit 1)
@@ -52500,7 +52519,7 @@
 		)
 	)
 	(symbol
-		(lib_name "SKRPACE010_5")
+		(lib_name "SKRPACE010_10")
 		(lib_id "shpc_mechanical:SKRPACE010")
 		(at 341.63 60.96 0)
 		(unit 1)
@@ -57011,7 +57030,7 @@
 		)
 	)
 	(symbol
-		(lib_name "SKRPACE010_12")
+		(lib_name "SKRPACE010_5")
 		(lib_id "shpc_mechanical:SKRPACE010")
 		(at 341.63 43.18 0)
 		(unit 1)
@@ -60514,7 +60533,7 @@
 		)
 	)
 	(symbol
-		(lib_name "SKRPACE010_14")
+		(lib_name "SKRPACE010_7")
 		(lib_id "shpc_mechanical:SKRPACE010")
 		(at 341.63 33.02 0)
 		(unit 1)
