@@ -33782,7 +33782,7 @@
 		(in_bom no)
 		(on_board yes)
 		(in_pos_files yes)
-		(dnp no)
+		(dnp yes)
 		(uuid "1ebbcfc4-903a-40b5-9b8e-a4826353e57f")
 		(property "Reference" "SW8"
 			(at 341.122 24.638 0)
@@ -33795,7 +33795,7 @@
 				(justify right)
 			)
 		)
-		(property "Value" "Rubber"
+		(property "Value" "PTS645SL50SMTR92"
 			(at 341.884 24.638 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -34756,7 +34756,7 @@
 		(in_bom no)
 		(on_board yes)
 		(in_pos_files yes)
-		(dnp no)
+		(dnp yes)
 		(uuid "236ca1dc-5bbc-4ee4-ac52-bfd01e87e309")
 		(property "Reference" "SW10"
 			(at 341.122 28.702 0)
@@ -34769,7 +34769,7 @@
 				(justify right)
 			)
 		)
-		(property "Value" "Rubber"
+		(property "Value" "PTS645SL50SMTR92"
 			(at 341.884 28.702 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -36457,7 +36457,7 @@
 		(in_bom no)
 		(on_board yes)
 		(in_pos_files yes)
-		(dnp no)
+		(dnp yes)
 		(uuid "2c538f6c-2a27-4d77-b8bb-3cc6575d85e0")
 		(property "Reference" "SW2"
 			(at 314.452 22.606 0)
@@ -36470,7 +36470,7 @@
 				(justify right)
 			)
 		)
-		(property "Value" "Rubber"
+		(property "Value" "PTS645SL50SMTR92"
 			(at 315.214 22.606 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -39163,7 +39163,7 @@
 		(in_bom no)
 		(on_board yes)
 		(in_pos_files yes)
-		(dnp no)
+		(dnp yes)
 		(uuid "38ac6bb7-84db-4000-9520-b5a287c24df4")
 		(property "Reference" "SW3"
 			(at 314.452 24.638 0)
@@ -39176,7 +39176,7 @@
 				(justify right)
 			)
 		)
-		(property "Value" "Rubber"
+		(property "Value" "PTS645SL50SMTR92"
 			(at 315.214 24.638 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -43902,7 +43902,7 @@
 		(in_bom no)
 		(on_board yes)
 		(in_pos_files yes)
-		(dnp no)
+		(dnp yes)
 		(uuid "56506459-2f8a-49f0-8f0e-6089ed71ddd1")
 		(property "Reference" "SW13"
 			(at 341.376 57.15 0)
@@ -43915,7 +43915,7 @@
 				(justify right)
 			)
 		)
-		(property "Value" "Rubber"
+		(property "Value" "PTS645SL50SMTR92"
 			(at 342.138 57.15 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -52509,7 +52509,7 @@
 		(in_bom no)
 		(on_board yes)
 		(in_pos_files yes)
-		(dnp no)
+		(dnp yes)
 		(uuid "8c2ee389-cb53-4fd5-b5ff-5f004737cee2")
 		(property "Reference" "SW12"
 			(at 341.376 55.118 0)
@@ -52522,7 +52522,7 @@
 				(justify right)
 			)
 		)
-		(property "Value" "Rubber"
+		(property "Value" "PTS645SL50SMTR92"
 			(at 342.138 55.118 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -57020,7 +57020,7 @@
 		(in_bom no)
 		(on_board yes)
 		(in_pos_files yes)
-		(dnp no)
+		(dnp yes)
 		(uuid "aa5d252a-0d23-42f9-9cd6-48ba3582b026")
 		(property "Reference" "SW9"
 			(at 341.122 26.67 0)
@@ -57033,7 +57033,7 @@
 				(justify right)
 			)
 		)
-		(property "Value" "Rubber"
+		(property "Value" "PTS645SL50SMTR92"
 			(at 341.884 26.67 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -58666,7 +58666,7 @@
 		(in_bom no)
 		(on_board yes)
 		(in_pos_files yes)
-		(dnp no)
+		(dnp yes)
 		(uuid "b1ddfe7c-ae55-4e06-b985-800db4b75ffc")
 		(property "Reference" "SW5"
 			(at 314.452 28.702 0)
@@ -58679,7 +58679,7 @@
 				(justify right)
 			)
 		)
-		(property "Value" "Rubber"
+		(property "Value" "PTS645SL50SMTR92"
 			(at 315.214 28.702 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -60523,7 +60523,7 @@
 		(in_bom no)
 		(on_board yes)
 		(in_pos_files yes)
-		(dnp no)
+		(dnp yes)
 		(uuid "bf729a22-f550-48a1-a813-6f214b258331")
 		(property "Reference" "SW7"
 			(at 341.122 22.606 0)
@@ -60536,7 +60536,7 @@
 				(justify right)
 			)
 		)
-		(property "Value" "Rubber"
+		(property "Value" "PTS645SL50SMTR92"
 			(at 341.884 22.606 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -61278,28 +61278,28 @@
 		(in_bom no)
 		(on_board yes)
 		(in_pos_files yes)
-		(dnp no)
+		(dnp yes)
 		(uuid "caa24f04-401f-4a31-8bc4-459a22ffa796")
 		(property "Reference" "SW6"
-			(at 331.216 81.788 90)
+			(at 329.438 82.804 90)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
-				(justify left)
+				(justify right)
 			)
 		)
-		(property "Value" "Rubber"
-			(at 331.216 83.82 90)
+		(property "Value" "PTS645SL50SMTR92"
+			(at 329.438 84.836 90)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
-				(justify left)
+				(justify right)
 			)
 		)
 		(property "Footprint" "Button_Switch_SMD:SW_SPST_PTS645Sx43SMTR92"
@@ -63856,7 +63856,7 @@
 		(in_bom no)
 		(on_board yes)
 		(in_pos_files yes)
-		(dnp no)
+		(dnp yes)
 		(uuid "d8e81aa1-c6fc-4083-a64a-94d7912ff0ad")
 		(property "Reference" "SW4"
 			(at 314.452 26.67 0)
@@ -63869,7 +63869,7 @@
 				(justify right)
 			)
 		)
-		(property "Value" "Rubber"
+		(property "Value" "PTS645SL50SMTR92"
 			(at 315.214 26.67 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -65428,7 +65428,7 @@
 		(in_bom no)
 		(on_board yes)
 		(in_pos_files yes)
-		(dnp no)
+		(dnp yes)
 		(uuid "e907de9b-83db-4e4d-a2fd-371a904a3da9")
 		(property "Reference" "J5"
 			(at 41.91 207.01 0)
@@ -67836,7 +67836,7 @@
 		(in_bom no)
 		(on_board yes)
 		(in_pos_files yes)
-		(dnp no)
+		(dnp yes)
 		(uuid "f8b36443-6f55-4800-a5ad-d04d04fe0d9a")
 		(property "Reference" "J11"
 			(at 379.73 202.438 0)
