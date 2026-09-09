@@ -2,7 +2,7 @@
 
 > **信号名について**: 回路図 (kicad/host_shell.kicad_sch) のネット名では、ホストシェル固有の信号に
 > `HS` プレフィックスが付く (例: `HSLCD_D0`、`HSAUX_SDA`、`HSTF_CSX`)。本仕様書では従来どおり
-> `H` プレフィックスで表記する。また `LCTF_ENAX` は回路図上では `LCTF_ENX` と表記される。
+> `H` プレフィックスで表記する。このほか回路図では、負論理信号に `X` サフィックスが付き (例: `HSLCD_RSTX`/`RDX`/`WRX`/`CSX`)、キー入力は `BTN_*` (例: `HKEY_L` → `BTN_L`)、TF カードと共有する SPI バスは `HSSPI_*` (`HTF_MISO/SCK/MOSI` → `HSSPI_MISO/SCK/MOSI`、`HTF_CS` → `HSTF_CSX`) と表記される。また `LCTF_ENAX` は回路図上では `LCTF_ENX` と表記される。
 
 ## キーパッド
 
@@ -24,8 +24,8 @@ Home ボタンはホストシェル側の機能の呼び出しに使用する。
 |P0_5|HKEY_B|Bボタン|
 |P0_6|HKEY_X|Xボタン|
 |P0_7|HKEY_Y|Yボタン|
-|P1_0|HKEY_STA|STARTボタン|
-|P1_1|HKEY_SEL|SELECTボタン|
+|P1_0|HKEY_SEL|SELECTボタン|
+|P1_1|HKEY_STA|STARTボタン|
 |P1_2|HKEY_BL|Lバンパー|
 |P1_3|HKEY_BR|Rバンパー|
 |P1_4|HKEY_HOME|Homeボタン|
@@ -57,10 +57,10 @@ D0-7 は HSTX 対応端子 (GPIO12-19) に割り当てており、将来的に�
 |---|---|---|
 |GPIO12-19|HLCD_D0-D7|データバス (HSTX 対応端子)|
 |GPIO20|HLCD_DC|SPI モードではマルチプレクサでパネルから切り離される|
-|GPIO21|HLCD_RST||
-|GPIO22|HLCD_RD||
-|GPIO23|HLCD_WR|SPI モード (4 線) では D/C として使用|
-|GPIO24|HLCD_CS||
+|GPIO23|HLCD_RST||
+|GPIO24|HLCD_RD||
+|GPIO25|HLCD_WR|SPI モード (4 線) では D/C として使用|
+|GPIO26|HLCD_CS||
 |GPIO27|HLCD_VSYNC|パネルの TE 出力 (ホスト側は入力)|
 |GPIO46|HLCD_BL|バックライト PWM (High=点灯)|
 
