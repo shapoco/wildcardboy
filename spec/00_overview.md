@@ -23,3 +23,7 @@ MCU を差し替えることができるハンドヘルドゲームコンソー�
 - LCD 制御
 - TF カード上のファイルシステムのブラウズ
 - TF カードからバイナリファイルを読み込んでロジックカード上の MCU へのプログラム書き込み (SPI or USB)
+
+## 回路図
+
+[host_shell.kicad_sch](https://kicanvas.org/?repo=https://github.com/shapoco/wildcardboy/blob/main/kicad/host_shell.kicad_sch)

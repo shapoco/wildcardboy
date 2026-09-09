@@ -25,3 +25,7 @@ The host shell acts as an RP2350B-based host controller with the following roles
 For detailed specifications, see [spec/](spec/).
 
 For demos and the latest development status, see the [#WildCardBoy tag on X](https://x.com/hashtag/WildCardBoy?f=live).
+
+## Schematics
+
+[host_shell.kicad_sch](https://kicanvas.org/?repo=https://github.com/shapoco/wildcardboy/blob/main/kicad/host_shell.kicad_sch)
