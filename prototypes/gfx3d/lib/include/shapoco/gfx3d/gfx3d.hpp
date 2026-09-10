@@ -85,7 +85,10 @@ void popState();  // スタックから変換行列とマテリアルを復元�
 
 void setMaterial(const Material &mat);   // 現在のマテリアルを設定する
 void putPrimitive(const Primitive &prim); // プリミティブをシーンに追加する
-void putCube(const vec3f &center, const vec3f &size); // 中心とサイズを指定して直方体をシーンに追加する
+// 中心とサイズを指定して直方体をシーンに追加する。
+// divs: 各面の一辺あたりの分割数 (面ごとに divs x divs 個のポリゴンに分割され、
+// 中間点の UV は補間で生成される)
+void putCube(const vec3f &center, const vec3f &size, int divs = 1);
 
 // 平行光源を設定する (dir は呼び出し時点の変換行列で変換される)
 void enableParallelLight(const vec3f &dir, const colorf &col);

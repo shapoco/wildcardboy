@@ -2,17 +2,25 @@
 
 #include <algorithm>
 
+// テクスチャの透視補正 ((u/w, v/w, 1/w) を補間してピクセル単位で除算する)。
+// デフォルト無効 (アフィン補間)。有効にするには 1 を定義する。
+#ifndef GFX3D_PERSPECTIVE_CORRECT_UV
+#define GFX3D_PERSPECTIVE_CORRECT_UV 0
+#endif
+
 namespace shapoco::gfx3d {
 
 // ---------------------------------------------------------------------------
 // 内部データ構造
 
 // ライティング・投影変換済みの頂点
-// テクスチャの透視補正のため uv は 1/w を乗じて保持する (スクリーン空間で線形になる)
 struct ShadedVertex {
     float sx, sy; // スクリーン座標
+    float zNdc;   // NDC 深度 (スクリーン空間で線形、小さいほど手前)
+    vec2f uv;     // GFX3D_PERSPECTIVE_CORRECT_UV 有効時は (u/w, v/w)
+#if GFX3D_PERSPECTIVE_CORRECT_UV
     float invW;   // 1/w
-    vec2f uv;     // (u/w, v/w)
+#endif
     colorf color;
 };
 
@@ -26,9 +34,12 @@ struct Triangle {
 // スキャンライン上の線分。両端の属性を保持し、ピクセル単位で線形補間する
 struct Span {
     float x0, x1;
+    float z0, z1;    // NDC 深度
     colorf c0, c1;
-    vec2f uv0, uv1;  // (u/w, v/w)
+    vec2f uv0, uv1;  // GFX3D_PERSPECTIVE_CORRECT_UV 有効時は (u/w, v/w)
+#if GFX3D_PERSPECTIVE_CORRECT_UV
     float iw0, iw1;  // 1/w
+#endif
     const Material *mat;
     Span *next;
 };
@@ -206,7 +217,7 @@ static void emitTriangle(const Vertex &a, const Vertex &b, const Vertex &c, cons
         float invW = 1.0f / w;
         t.v[i].sx = (clip.x * invW * 0.5f + 0.5f) * s.screenW;
         t.v[i].sy = (0.5f - clip.y * invW * 0.5f) * s.screenH;
-        t.v[i].invW = invW;
+        t.v[i].zNdc = clip.z * invW;
 
         vec3f n = normalize(s.cur.transformDir(verts[i]->normal));
 
@@ -217,7 +228,12 @@ static void emitTriangle(const Vertex &a, const Vertex &b, const Vertex &c, cons
         } else {
             uv = verts[i]->uv;
         }
+#if GFX3D_PERSPECTIVE_CORRECT_UV
+        t.v[i].invW = invW;
         t.v[i].uv = uv * invW; // 透視補正のため 1/w を乗じる
+#else
+        t.v[i].uv = uv; // アフィン補間
+#endif
 
         // グーローシェーディング: 頂点単位でライティング
         colorf col = {0, 0, 0, mat->diffuse.a};
@@ -295,8 +311,9 @@ void putPrimitive(const Primitive &prim) {
     }
 }
 
-void putCube(const vec3f &center, const vec3f &size) {
-    // 面ごとの法線・UV を持つ 24 頂点の直方体
+void putCube(const vec3f &center, const vec3f &size, int divs) {
+    if (divs < 1) divs = 1;
+
     static const int8_t FACE_NORMALS[6][3] = {
         {1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1},
     };
@@ -309,41 +326,56 @@ void putCube(const vec3f &center, const vec3f &size) {
         {{-1, -1, 1}, {1, -1, 1}, {1, 1, 1}, {-1, 1, 1}},       // +Z
         {{1, -1, -1}, {-1, -1, -1}, {-1, 1, -1}, {1, 1, -1}},   // -Z
     };
-    static const float FACE_UVS[4][2] = {{0, 1}, {1, 1}, {1, 0}, {0, 0}};
+    static const vec2f FACE_UVS[4] = {{0, 1}, {1, 1}, {1, 0}, {0, 0}};
+    static const uint16_t QUAD_INDICES[6] = {0, 1, 2, 0, 2, 3};
 
-    Vertex verts[24];
-    uint16_t indices[36];
     vec3f half = size * 0.5f;
 
     for (int f = 0; f < 6; f++) {
+        vec3f corner[4];
         for (int i = 0; i < 4; i++) {
-            Vertex &v = verts[f * 4 + i];
-            v.position = {
+            corner[i] = {
                 center.x + half.x * FACE_CORNERS[f][i][0],
                 center.y + half.y * FACE_CORNERS[f][i][1],
                 center.z + half.z * FACE_CORNERS[f][i][2],
             };
-            v.normal = {(float)FACE_NORMALS[f][0], (float)FACE_NORMALS[f][1], (float)FACE_NORMALS[f][2]};
-            v.uv = {FACE_UVS[i][0], FACE_UVS[i][1]};
         }
-        indices[f * 6 + 0] = (uint16_t)(f * 4 + 0);
-        indices[f * 6 + 1] = (uint16_t)(f * 4 + 1);
-        indices[f * 6 + 2] = (uint16_t)(f * 4 + 2);
-        indices[f * 6 + 3] = (uint16_t)(f * 4 + 0);
-        indices[f * 6 + 4] = (uint16_t)(f * 4 + 2);
-        indices[f * 6 + 5] = (uint16_t)(f * 4 + 3);
-    }
+        vec3f normal = {(float)FACE_NORMALS[f][0], (float)FACE_NORMALS[f][1], (float)FACE_NORMALS[f][2]};
+        // corner[0] を原点、corner[0]→corner[1] を u 方向、corner[0]→corner[3] を v 方向とする
+        vec3f du = corner[1] - corner[0];
+        vec3f dv = corner[3] - corner[0];
+        vec2f duvU = FACE_UVS[1] - FACE_UVS[0];
+        vec2f duvV = FACE_UVS[3] - FACE_UVS[0];
 
-    VertexBuffer vb = {24, verts};
-    Primitive prim = {PrimitiveType::TRIANGLES, &vb, 36, indices, nullptr};
-    putPrimitive(prim);
+        // 面を divs x divs のポリゴンに分割する (中間点の UV は補間で生成)
+        for (int j = 0; j < divs; j++) {
+            for (int i = 0; i < divs; i++) {
+                float u0 = (float)i / divs, u1 = (float)(i + 1) / divs;
+                float v0 = (float)j / divs, v1 = (float)(j + 1) / divs;
+                const float us[4] = {u0, u1, u1, u0};
+                const float vs[4] = {v0, v0, v1, v1};
+
+                Vertex quad[4];
+                for (int k = 0; k < 4; k++) {
+                    quad[k].position = corner[0] + du * us[k] + dv * vs[k];
+                    quad[k].normal = normal;
+                    quad[k].uv = FACE_UVS[0] + duvU * us[k] + duvV * vs[k];
+                }
+                VertexBuffer vb = {4, quad};
+                Primitive prim = {PrimitiveType::TRIANGLES, &vb, 6, QUAD_INDICES, nullptr};
+                putPrimitive(prim);
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
 // レンダリング
 
 void beginRender() {
-    // 遠い順 (ビュー空間 z の昇順 = より負のものが先) にソートする
+    // 遠い順 (ビュー空間 z の昇順 = より負のものが先) にソートする。
+    // 不透明同士の前後関係は線分挿入時の深度比較で解決されるため、
+    // このソートは主に半透明の合成順を決める
     std::sort(s.tris, s.tris + s.triCount,
               [](const Triangle &a, const Triangle &b) { return a.depth < b.depth; });
 }
@@ -360,7 +392,10 @@ static void clipSpanRight(Span &sp, float xc) {
     float t = (xc - sp.x0) / (sp.x1 - sp.x0);
     sp.c1 = lerp(sp.c0, sp.c1, t);
     sp.uv1 = lerp(sp.uv0, sp.uv1, t);
+    sp.z1 = sp.z0 + (sp.z1 - sp.z0) * t;
+#if GFX3D_PERSPECTIVE_CORRECT_UV
     sp.iw1 = sp.iw0 + (sp.iw1 - sp.iw0) * t;
+#endif
     sp.x1 = xc;
 }
 
@@ -369,64 +404,123 @@ static void clipSpanLeft(Span &sp, float xc) {
     float t = (xc - sp.x0) / (sp.x1 - sp.x0);
     sp.c0 = lerp(sp.c0, sp.c1, t);
     sp.uv0 = lerp(sp.uv0, sp.uv1, t);
+    sp.z0 = sp.z0 + (sp.z1 - sp.z0) * t;
+#if GFX3D_PERSPECTIVE_CORRECT_UV
     sp.iw0 = sp.iw0 + (sp.iw1 - sp.iw0) * t;
+#endif
     sp.x0 = xc;
 }
 
-// 線分をリスト末尾に追加する。不透明な場合は既存線分の重なる部分を先に削除する
-static void insertSpan(const Span &n) {
-    bool opaque = (n.mat->blendMode == BlendMode::NONE);
+// 線分上の位置 x における NDC 深度
+static inline float spanDepthAt(const Span &sp, float x) {
+    return sp.z0 + (sp.z1 - sp.z0) * (x - sp.x0) / (sp.x1 - sp.x0);
+}
 
-    if (opaque) {
+// 線分をリスト末尾に追加する。
+// 不透明な線分が関与する重なりについては、三角形単位のソート順だけに頼らず、
+// 重なり区間の中央での深度比較によって手前側の線分が残るように奥側を削除する。
+// (巨大なポリゴンと小さなポリゴンの前後関係もこれで正しく解決される)
+static void insertSpan(const Span &nIn) {
+    // 新しい線分が既存の手前の線分に切られて複数の断片になる場合がある
+    constexpr int MAX_FRAGS = 8;
+    Span pending[MAX_FRAGS];
+    int numPending = 0;
+    pending[numPending++] = nIn;
+
+    while (numPending > 0) {
+        Span frag = pending[--numPending];
+        bool fragOpaque = (frag.mat->blendMode == BlendMode::NONE);
+        bool dropped = false;
+
         Span **pp = &s.spanHead;
         while (*pp) {
             Span *e = *pp;
-            if (e->x1 <= n.x0 || e->x0 >= n.x1) {
+            if (e->x1 <= frag.x0 || e->x0 >= frag.x1) {
                 pp = &e->next;
                 continue;
             }
-            bool leftRemains = e->x0 < n.x0;
-            bool rightRemains = e->x1 > n.x1;
-            if (leftRemains && rightRemains) {
-                // 中抜き: 右側を新しい線分として分割する
-                Span *r = allocSpan();
-                if (r) {
-                    *r = *e;
-                    clipSpanLeft(*r, n.x1);
-                    r->next = e->next;
-                    e->next = r;
+
+            float ox0 = std::max(e->x0, frag.x0);
+            float ox1 = std::min(e->x1, frag.x1);
+            float xm = (ox0 + ox1) * 0.5f;
+            bool fragNearer = spanDepthAt(frag, xm) < spanDepthAt(*e, xm);
+            bool eOpaque = (e->mat->blendMode == BlendMode::NONE);
+
+            if (fragNearer && fragOpaque) {
+                // 既存線分の重なり部分を削除する
+                bool leftRemains = e->x0 < ox0;
+                bool rightRemains = e->x1 > ox1;
+                if (leftRemains && rightRemains) {
+                    // 中抜き: 右側を新しい線分として分割する
+                    Span *r = allocSpan();
+                    if (r) {
+                        *r = *e;
+                        clipSpanLeft(*r, ox1);
+                        r->next = e->next;
+                        e->next = r;
+                    }
+                    clipSpanRight(*e, ox0);
+                    pp = &e->next;
+                } else if (leftRemains) {
+                    clipSpanRight(*e, ox0);
+                    pp = &e->next;
+                } else if (rightRemains) {
+                    clipSpanLeft(*e, ox1);
+                    pp = &e->next;
+                } else {
+                    *pp = e->next; // 完全に覆われた線分を削除
                 }
-                clipSpanRight(*e, n.x0);
-                pp = &e->next;
-            } else if (leftRemains) {
-                clipSpanRight(*e, n.x0);
-                pp = &e->next;
-            } else if (rightRemains) {
-                clipSpanLeft(*e, n.x1);
-                pp = &e->next;
+            } else if (!fragNearer && eOpaque) {
+                // 新しい線分の重なり部分を削除する
+                bool leftRemains = frag.x0 < ox0;
+                bool rightRemains = frag.x1 > ox1;
+                if (leftRemains && rightRemains) {
+                    if (numPending < MAX_FRAGS) {
+                        Span right = frag;
+                        clipSpanLeft(right, ox1);
+                        pending[numPending++] = right;
+                    }
+                    clipSpanRight(frag, ox0);
+                    pp = &e->next;
+                } else if (leftRemains) {
+                    clipSpanRight(frag, ox0);
+                    pp = &e->next;
+                } else if (rightRemains) {
+                    clipSpanLeft(frag, ox1);
+                    pp = &e->next;
+                } else {
+                    dropped = true; // 完全に隠されている
+                    break;
+                }
             } else {
-                *pp = e->next; // 完全に覆われた線分を削除
+                // 半透明同士、または半透明が手前にある場合はどちらも残す
+                // (合成はリスト順 = 三角形の遠い順ソートに従う)
+                pp = &e->next;
             }
         }
+
+        if (dropped) continue;
+        if (frag.x0 >= frag.x1) continue;
+        Span *sp = allocSpan();
+        if (!sp) continue; // プールあふれ: この線分は破棄
+        *sp = frag;
+        sp->next = nullptr;
+        Span **tail = &s.spanHead;
+        while (*tail) tail = &(*tail)->next;
+        *tail = sp;
     }
-
-    Span *sp = allocSpan();
-    if (!sp) return; // プールあふれ: この線分は破棄
-    *sp = n;
-    sp->next = nullptr;
-
-    Span **pp = &s.spanHead;
-    while (*pp) pp = &(*pp)->next;
-    *pp = sp;
 }
 
 // スキャンライン yc と三角形の交差から線分を生成する。交差しない場合は false
 static bool makeSpan(const Triangle &t, float yc, Span &out) {
     struct EndPt {
         float x;
+        float z;
         colorf c;
         vec2f uv;
+#if GFX3D_PERSPECTIVE_CORRECT_UV
         float iw;
+#endif
     };
     EndPt pts[3];
     int n = 0;
@@ -438,9 +532,12 @@ static bool makeSpan(const Triangle &t, float yc, Span &out) {
         if ((a.sy <= yc && yc < b.sy) || (b.sy <= yc && yc < a.sy)) {
             float tt = (yc - a.sy) / (b.sy - a.sy);
             pts[n].x = a.sx + (b.sx - a.sx) * tt;
+            pts[n].z = a.zNdc + (b.zNdc - a.zNdc) * tt;
             pts[n].c = lerp(a.color, b.color, tt);
             pts[n].uv = lerp(a.uv, b.uv, tt);
+#if GFX3D_PERSPECTIVE_CORRECT_UV
             pts[n].iw = a.invW + (b.invW - a.invW) * tt;
+#endif
             n++;
         }
     }
@@ -454,10 +551,14 @@ static bool makeSpan(const Triangle &t, float yc, Span &out) {
     out.x1 = pts[ri].x;
     out.c0 = pts[li].c;
     out.c1 = pts[ri].c;
+    out.z0 = pts[li].z;
+    out.z1 = pts[ri].z;
     out.uv0 = pts[li].uv;
     out.uv1 = pts[ri].uv;
+#if GFX3D_PERSPECTIVE_CORRECT_UV
     out.iw0 = pts[li].iw;
     out.iw1 = pts[ri].iw;
+#endif
     out.mat = t.mat;
     out.next = nullptr;
     return true;
@@ -490,10 +591,14 @@ static void rasterizeLine(uint16_t *dst, float regionX0, float regionX1) {
             colorf col = lerp(sp->c0, sp->c1, t);
 
             if (useTex) {
+#if GFX3D_PERSPECTIVE_CORRECT_UV
                 // 透視補正: (u/w, v/w) と 1/w を線形補間し、ピクセル単位で除算する
                 vec2f uvw = lerp(sp->uv0, sp->uv1, t);
                 float iw = sp->iw0 + (sp->iw1 - sp->iw0) * t;
                 vec2f uv = uvw * (1.0f / iw);
+#else
+                vec2f uv = lerp(sp->uv0, sp->uv1, t); // アフィン補間
+#endif
                 float tr, tg, tb;
                 sampleTexture(*mat.texture, uv, tr, tg, tb);
                 col.r *= tr;

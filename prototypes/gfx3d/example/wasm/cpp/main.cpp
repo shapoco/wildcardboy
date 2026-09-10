@@ -41,6 +41,27 @@ static uint16_t rgb565(float r, float g, float b) {
                       (int)(clamp01(b) * 31 + 0.5f));
 }
 
+// 決定的な 2D ハッシュ (0..1)
+static float hash2(int x, int y) {
+    uint32_t h = (uint32_t)x * 374761393u + (uint32_t)y * 668265263u;
+    h = (h ^ (h >> 13)) * 1274126177u;
+    h ^= h >> 16;
+    return (float)(h & 0xffff) / 65535.0f;
+}
+
+// バリューノイズ (滑らかに補間したハッシュ)
+static float valueNoise(float x, float y) {
+    int xi = (int)std::floor(x), yi = (int)std::floor(y);
+    float fx = x - xi, fy = y - yi;
+    fx = fx * fx * (3 - 2 * fx); // smoothstep
+    fy = fy * fy * (3 - 2 * fy);
+    float n00 = hash2(xi, yi), n10 = hash2(xi + 1, yi);
+    float n01 = hash2(xi, yi + 1), n11 = hash2(xi + 1, yi + 1);
+    float n0 = n00 + (n10 - n00) * fx;
+    float n1 = n01 + (n11 - n01) * fx;
+    return n0 + (n1 - n0) * fy;
+}
+
 static void generateTextures() {
     // 市松模様
     for (int y = 0; y < 64; y++) {
@@ -49,21 +70,42 @@ static void generateTextures() {
             checkerPixels[y * 64 + x] = c ? rgb565(0.85f, 0.85f, 0.9f) : rgb565(0.35f, 0.4f, 0.5f);
         }
     }
-    // 環境マップ: 上が明るい空、下が暗い地面、左上にハイライト
+    // 環境マップ:
+    // - 上半球 (v < 0.5): 空のグラデーションに雲模様 (ノイズ) を加算合成
+    // - 下半球 (v >= 0.5): 床のチェック柄が写り込んでいるように見せる市松模様
     for (int y = 0; y < 64; y++) {
         for (int x = 0; x < 64; x++) {
             float u = (x + 0.5f) / 64.0f;
             float v = (y + 0.5f) / 64.0f;
-            float sky = 1.0f - v;
-            float r = 0.15f + 0.45f * sky;
-            float g = 0.2f + 0.55f * sky;
-            float b = 0.35f + 0.6f * sky;
-            float dx = u - 0.3f, dy = v - 0.25f;
-            float hl = 1.0f - std::sqrt(dx * dx + dy * dy) * 3.5f;
-            if (hl > 0) {
-                r += hl * hl;
-                g += hl * hl;
-                b += hl * hl;
+            float r, g, b;
+            if (v < 0.5f) {
+                // 空: 天頂 (v=0) が明るく、地平線 (v=0.5) に向かって落とす
+                float sky = 1.0f - v * 2.0f;
+                r = 0.15f + 0.4f * sky;
+                g = 0.2f + 0.5f * sky;
+                b = 0.35f + 0.55f * sky;
+                // 雲: 2 オクターブのバリューノイズを加算合成
+                float n = valueNoise(u * 6.0f, v * 6.0f) * 0.65f +
+                          valueNoise(u * 13.0f, v * 13.0f) * 0.35f;
+                float cloud = (n - 0.45f) * 1.6f;
+                if (cloud > 0) {
+                    r += cloud;
+                    g += cloud;
+                    b += cloud * 0.9f;
+                }
+            } else {
+                // 床の写り込み: 床と同じ配色の市松模様、下端に向かって減衰させる
+                bool c = ((x >> 3) ^ ((y - 32) >> 3)) & 1;
+                float fade = 1.0f - (v - 0.5f) * 1.2f;
+                if (c) {
+                    r = 0.85f * fade;
+                    g = 0.85f * fade;
+                    b = 0.9f * fade;
+                } else {
+                    r = 0.35f * fade;
+                    g = 0.4f * fade;
+                    b = 0.5f * fade;
+                }
             }
             envPixels[y * 64 + x] = rgb565(r, g, b);
         }
@@ -174,9 +216,9 @@ WCB_EXPORT void wcb_frame(float t, float yaw, float pitch, float dist) {
     g3::enableParallelLight({-0.5f, -1.0f, -0.6f}, {1.0f, 0.98f, 0.9f, 1.0f});
     g3::enableEnvironmentLight({0.25f, 0.28f, 0.38f, 1.0f});
 
-    // 床
+    // 床 (面積が大きくアフィン補間の歪みが目立つため分割する)
     g3::setMaterial(matFloor);
-    g3::putCube({0, -1.35f, 0}, {7.0f, 0.3f, 7.0f});
+    g3::putCube({0, -1.35f, 0}, {7.0f, 0.3f, 7.0f}, 4);
 
     // クロームのトーラス
     g3::pushState();

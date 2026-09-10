@@ -23,6 +23,11 @@ make serve    # docs/ をルートに HTTP サーバを起動
 ブラウザで http://localhost:8000/prototypes/gfx3d/ を開く。
 (fetch を使用するため file:// では動作しない)
 
+## コンパイルオプション
+
+- `GFX3D_PERSPECTIVE_CORRECT_UV=1`: テクスチャ座標の透視補正を有効にする
+  (デフォルトはアフィン補間。ピクセル単位の除算が追加される)
+
 ## メモリ使用量の目安
 
 作業メモリはすべて `init()` に渡したアリーナから確保される。
