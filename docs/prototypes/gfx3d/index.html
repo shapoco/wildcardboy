@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>gfx3d prototype - WildCardBoy</title>
+<style>
+  body {
+    margin: 0;
+    padding: 24px;
+    background: #14161f;
+    color: #cfd3e0;
+    font-family: sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+  h1 {
+    font-size: 18px;
+    margin: 0;
+  }
+  #screen {
+    image-rendering: pixelated;
+    background: #000;
+    border: 1px solid #3a3f55;
+    touch-action: none;
+    cursor: grab;
+  }
+  #screen:active { cursor: grabbing; }
+  #fps { font-size: 13px; color: #8f96ad; min-height: 1em; }
+  #status { font-size: 13px; color: #e0a0a0; max-width: 720px; }
+  .help { font-size: 13px; color: #8f96ad; }
+</style>
+</head>
+<body>
+<h1>gfx3d prototype (WildCardBoy システムメニュー背景用 3D ライブラリ)</h1>
+<canvas id="screen"></canvas>
+<div id="fps"></div>
+<div class="help">
+  マウスドラッグ / 矢印キー: カメラ回転、ホイール / PageUp・PageDown: ズーム
+</div>
+<div id="status">読み込み中...</div>
+<script src="main.js"></script>
+</body>
+</html>
