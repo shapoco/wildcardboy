@@ -2,13 +2,14 @@ EMCC ?= emcc
 
 REPO_ROOT := ../../../..
 LIB_DIR := ../../lib
+COMMON_DIR := ../common
 OUT_DIR := $(REPO_ROOT)/docs/prototypes/gfx3d
 OUT := $(OUT_DIR)/gfx3d.wasm
 
-SRCS := cpp/main.cpp $(LIB_DIR)/src/gfx3d.cpp
-HDRS := $(wildcard $(LIB_DIR)/include/shapoco/gfx3d/*.hpp)
+SRCS := cpp/main.cpp $(COMMON_DIR)/scene.cpp $(LIB_DIR)/src/gfx3d.cpp
+HDRS := $(wildcard $(LIB_DIR)/include/shapoco/gfx3d/*.hpp) $(COMMON_DIR)/scene.hpp
 
-CFLAGS := -O2 -std=c++17 -Wall -Wextra -I $(LIB_DIR)/include
+CFLAGS := -O2 -std=c++17 -Wall -Wextra -I $(LIB_DIR)/include -I $(COMMON_DIR)
 
 .PHONY: all clean serve
 

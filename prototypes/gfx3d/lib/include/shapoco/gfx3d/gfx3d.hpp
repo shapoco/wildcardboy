@@ -21,6 +21,7 @@ struct VertexBuffer {
     const Vertex *vertices;
 };
 
+// 幅・高さは 2 の冪であること (テクスチャ座標のラップをビットマスクで行う)
 struct Texture {
     int16_t width;
     int16_t height;
