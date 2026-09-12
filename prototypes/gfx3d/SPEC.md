@@ -135,6 +135,9 @@ void beginRender(); // レンダリングを開始する
 void endRender(); // レンダリングを終了する
 void render(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t* dst, uint32_t stride); // 指定された領域をレンダリングする
 
+// 統計 (アリーナの使用量、三角形数と容量、線分プールのピークと容量、あふれで破棄した数)
+Stats getStats();
+
 };
 ```
 

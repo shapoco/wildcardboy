@@ -109,4 +109,21 @@ void endRender();   // レンダリングを終了する
 // 指定された領域をレンダリングする。dst は領域の左上を指し、stride は dst の行ピッチ (ピクセル単位)
 void render(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t *dst, uint32_t stride);
 
+// ---------------------------------------------------------------------------
+// 統計
+
+struct Stats {
+    size_t arenaSize;   // init() に渡したアリーナのサイズ
+    size_t arenaUsed;   // 直近のフレームで実際に使用した量 (固定分 + 三角形 + 線分のピーク)
+    int triCapacity;    // トライアングルバッファの容量
+    int triCount;       // 現在のシーンの三角形数 (カリング後)
+    int triDropped;     // バッファあふれで破棄した三角形数 (beginScene() でリセット)
+    int spanCapacity;   // 線分プールの容量
+    int spanPeak;       // 1 ラインで同時に使用した線分数の最大 (beginRender() でリセット)
+    int spanDropped;    // プールあふれで破棄した線分数 (beginRender() でリセット)
+};
+
+// 統計を取得する (endRender() の後に呼ぶとそのフレームの値が得られる)
+Stats getStats();
+
 } // namespace shapoco::gfx3d

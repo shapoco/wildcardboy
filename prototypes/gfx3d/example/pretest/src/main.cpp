@@ -36,10 +36,10 @@ namespace scene = gfx3d_example;
 //-----------------------------------------------------------------------------
 static constexpr int SCREEN_W = LCD_WIDTH;
 static constexpr int SCREEN_H = LCD_HEIGHT;
-static constexpr int BAND_H = 32;  // two overlay text lines fit in band 0
+static constexpr int BAND_H = 32;
 static constexpr int NUM_BANDS = SCREEN_H / BAND_H;
 static_assert(SCREEN_H % BAND_H == 0, "BAND_H must divide the screen height");
-static_assert(BAND_H >= 2 * OVERLAY_GLYPH_H, "overlay needs two text lines in band 0");
+static constexpr int OVERLAY_LINES = 3;  // top-left stats text (may straddle bands)
 
 static constexpr size_t ARENA_SIZE = 128 * 1024;  // same as the WASM example
 static constexpr float LCD_PIO_BASE_HZ = 150e6f;  // 40 ns/byte at clkdiv 1.0
@@ -136,7 +136,7 @@ int main() {
   uint16_t prevKeys = 0;
 
   Stats st = {};
-  char ovLine[2][SCREEN_W / OVERLAY_GLYPH_W + 1] = {"measuring...", ""};
+  char ovLine[OVERLAY_LINES][SCREEN_W / OVERLAY_GLYPH_W + 1] = {"measuring...", "", ""};
 
   uint64_t prevFrameUs = time_us_64();
   uint64_t lastStatsUs = prevFrameUs;
@@ -179,9 +179,10 @@ int main() {
       g3::render(0, static_cast<int16_t>(y), SCREEN_W, BAND_H, buf, SCREEN_W);
       const uint64_t b1 = time_us_64();
 
-      if (i == 0 && overlay) {
-        for (int l = 0; l < 2; ++l) {
-          overlayDrawText(buf, SCREEN_W, SCREEN_W, BAND_H, 0, l * OVERLAY_GLYPH_H, ovLine[l],
+      if (overlay && y < OVERLAY_LINES * OVERLAY_GLYPH_H) {
+        // Rows outside this band are clipped by overlayDrawText().
+        for (int l = 0; l < OVERLAY_LINES; ++l) {
+          overlayDrawText(buf, SCREEN_W, SCREEN_W, BAND_H, 0, l * OVERLAY_GLYPH_H - y, ovLine[l],
                           0xFFFF, 0x0000);
         }
       }
@@ -203,6 +204,7 @@ int main() {
       st.waitUs += b3 - b2;
     }
     g3::endRender();
+    const g3::Stats gs = g3::getStats();
 
     st.keyUs += t0 - frameStart;
     st.sceneUs += t1 - t0;
@@ -216,17 +218,26 @@ int main() {
       const float frameMs = st.frames ? static_cast<float>(now - lastStatsUs) / st.frames / 1000.0f : 0.0f;
       printf("[gfx3d] fps=%.2f frame=%.2fms (max %.2f) key=%.2f scene=%.2f sort=%.2f"
              " render=%.2f (band max %.2f) swap=%.2f lcdwait=%.2f"
+             " | tri=%d/%d(drop %d) span=%d/%d(drop %d) arena=%u/%u"
              " | cam yaw=%.2f pitch=%.2f dist=%.2f%s\n",
              fps, frameMs, st.frameMaxUs / 1000.0f, avgMs(st.keyUs, st.frames),
              avgMs(st.sceneUs, st.frames), avgMs(st.sortUs, st.frames),
              avgMs(st.renderUs, st.frames), st.renderBandMaxUs / 1000.0f,
-             avgMs(st.swapUs, st.frames), avgMs(st.waitUs, st.frames), cam.yaw, cam.pitch,
-             cam.dist, paused ? " (paused)" : "");
+             avgMs(st.swapUs, st.frames), avgMs(st.waitUs, st.frames), gs.triCount,
+             gs.triCapacity, gs.triDropped, gs.spanPeak, gs.spanCapacity, gs.spanDropped,
+             static_cast<unsigned>(gs.arenaUsed), static_cast<unsigned>(gs.arenaSize), cam.yaw,
+             cam.pitch, cam.dist, paused ? " (paused)" : "");
       snprintf(ovLine[0], sizeof(ovLine[0]), "%5.1f fps  %6.2f ms/frame%s", fps, frameMs,
                paused ? "  PAUSED" : "");
       snprintf(ovLine[1], sizeof(ovLine[1]), "scene %.2f  sort %.2f  render %.2f  lcd %.2f",
                avgMs(st.sceneUs, st.frames), avgMs(st.sortUs, st.frames),
                avgMs(st.renderUs, st.frames), avgMs(st.waitUs, st.frames));
+      // Triangle / span pool usage (last frame) and the arena bytes they occupy.
+      snprintf(ovLine[2], sizeof(ovLine[2]), "tri %d/%d%s  span %d/%d%s  arena %.1f/%.0fKB %d%%",
+               gs.triCount, gs.triCapacity, gs.triDropped ? "!" : "", gs.spanPeak,
+               gs.spanCapacity, gs.spanDropped ? "!" : "", gs.arenaUsed / 1024.0f,
+               gs.arenaSize / 1024.0f,
+               static_cast<int>(gs.arenaUsed * 100 / (gs.arenaSize ? gs.arenaSize : 1)));
       st = {};
       lastStatsUs = now;
     }

@@ -121,6 +121,12 @@ struct State {
     colorf clearColor = {0, 0, 0, 1};
 
     CachedVertex vcache[VCACHE_SIZE];
+
+    size_t arenaSize = 0;
+    size_t arenaFixed = 0; // ラインバケットなど常に使用する分
+    int triDropped = 0;
+    int spanPeak = 0;
+    int spanDropped = 0;
 };
 
 static State s;
@@ -166,6 +172,7 @@ void init(int16_t w, int16_t h, void *arena, size_t arenaSize) {
     s = State();
     s.screenW = w;
     s.screenH = h;
+    s.arenaSize = arenaSize;
 
     uintptr_t p = (uintptr_t)arena;
     uintptr_t end = p + arenaSize;
@@ -179,6 +186,7 @@ void init(int16_t w, int16_t h, void *arena, size_t arenaSize) {
     s.bucketTail = s.bucketHead + h;
     p += bucketBytes;
     p = (p + 7u) & ~(uintptr_t)7u;
+    s.arenaFixed = (size_t)(p - (uintptr_t)arena);
 
     // 線分プール: 残りの 1/4
     avail = (end > p) ? (size_t)(end - p) : 0;
@@ -208,6 +216,7 @@ void deinit() { s = State(); }
 
 void beginScene() {
     s.triCount = 0;
+    s.triDropped = 0;
     s.stackTop = 0;
     s.cur = mat4f::identity();
 }
@@ -349,7 +358,10 @@ static void shadeVertex(const Vertex &in, const Material *mat, const Texture *te
 static void emitTriangle(const CachedVertex &a, const CachedVertex &b, const CachedVertex &c,
                          const Material *mat, const Texture *tex) {
     if (!a.ok || !b.ok || !c.ok) return;
-    if (s.triCount >= s.triCapacity) return; // バッファあふれ: このフレームでは破棄
+    if (s.triCount >= s.triCapacity) { // バッファあふれ: このフレームでは破棄
+        s.triDropped++;
+        return;
+    }
 
     Triangle &t = s.tris[s.triCount];
     t.v[0] = a.sv;
@@ -524,6 +536,8 @@ void beginRender() {
     // 遠い順 (ビュー空間 z の昇順 = より負のものが先) にソートする。
     // 不透明同士の前後関係は線分挿入時の深度比較で解決されるため、
     // このソートは主に半透明の合成順を決める。三角形本体ではなくインデックスを並べ替える
+    s.spanPeak = 0;
+    s.spanDropped = 0;
     for (int i = 0; i < s.triCount; i++) s.order[i] = (uint16_t)i;
     const Triangle *tris = s.tris;
     std::sort(s.order, s.order + s.triCount,
@@ -533,7 +547,10 @@ void beginRender() {
 void endRender() {}
 
 static inline Span *allocSpan() {
-    if (s.spanCount >= s.spanCapacity) return nullptr;
+    if (s.spanCount >= s.spanCapacity) {
+        s.spanDropped++;
+        return nullptr;
+    }
     return &s.spanPool[s.spanCount++];
 }
 
@@ -977,6 +994,7 @@ void render(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t *dst, uint32_t 
             }
             pp = &link[p];
         }
+        if (s.spanCount > s.spanPeak) s.spanPeak = s.spanCount;
 
         // 不透明線分 (x 昇順) とその隙間の背景色を描き、その上に半透明線分を合成する
         uint16_t *line = dst + (size_t)(yi - y) * stride;
@@ -989,6 +1007,23 @@ void render(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t *dst, uint32_t 
         if (cursor < rx1) fill16(line + (cursor - rx0), rx1 - cursor, clear565);
         for (const Span *e = s.transHead; e; e = e->next) rasterSpan(line, rx0, *e);
     }
+}
+
+// ---------------------------------------------------------------------------
+// 統計
+
+Stats getStats() {
+    Stats st;
+    st.arenaSize = s.arenaSize;
+    st.arenaUsed = s.arenaFixed + (size_t)s.triCount * (sizeof(Triangle) + 2 * sizeof(uint16_t)) +
+                   (size_t)s.spanPeak * sizeof(Span);
+    st.triCapacity = s.triCapacity;
+    st.triCount = s.triCount;
+    st.triDropped = s.triDropped;
+    st.spanCapacity = s.spanCapacity;
+    st.spanPeak = s.spanPeak;
+    st.spanDropped = s.spanDropped;
+    return st;
 }
 
 } // namespace shapoco::gfx3d
